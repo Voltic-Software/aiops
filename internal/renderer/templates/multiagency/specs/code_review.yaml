@@ -1,0 +1,194 @@
+version: "1.0"
+name: "Code Review Workflow"
+
+llm:
+  provider: cascade
+  model: current
+  temperature: 0.0
+  max_tokens: 4096
+
+agents:
+  - id: analyzer
+    role: "a senior code analysis expert"
+    goal: "Analyze the code structure, patterns, and overall quality"
+    constraints:
+      - "Focus on code organization and architecture"
+      - "Identify design patterns used"
+      - "Assess code complexity and maintainability"
+      - "Identify code smells and anti-patterns"
+      - "Do not suggest fixes"
+    input_from: []
+    output_schema:
+      type: object
+      properties:
+        summary:
+          type: string
+        structure:
+          type: object
+          properties:
+            files_analyzed:
+              type: integer
+            main_components:
+              type: array
+              items:
+                type: string
+            patterns_identified:
+              type: array
+              items:
+                type: string
+        complexity_assessment:
+          type: string
+        code_smells:
+          type: array
+          items:
+            type: object
+            properties:
+              issue_id:
+                type: string
+              type:
+                type: string
+              location:
+                type: string
+              description:
+                type: string
+      required:
+        - summary
+        - structure
+        - complexity_assessment
+
+  - id: security_reviewer
+    role: "a security-focused code reviewer"
+    goal: "Identify security vulnerabilities and risks in the code"
+    constraints:
+      - "Identify vulnerabilities only — do not propose fixes"
+      - "Focus on OWASP Top 10 and real-world exploitability"
+      - "Assess authentication, authorization, and data exposure risks"
+    input_from:
+      - analyzer
+    output_schema:
+      type: object
+      properties:
+        security_score:
+          type: string
+          enum: ["critical", "high_risk", "medium_risk", "low_risk", "secure"]
+        vulnerabilities:
+          type: array
+          items:
+            type: object
+            properties:
+              issue_id:
+                type: string
+              severity:
+                type: string
+                enum: ["critical", "high", "medium", "low", "info"]
+              category:
+                type: string
+              location:
+                type: string
+              description:
+                type: string
+        missing_controls:
+          type: array
+          items:
+            type: string
+      required:
+        - security_score
+        - vulnerabilities
+
+  - id: performance_reviewer
+    role: "a performance analysis specialist"
+    goal: "Identify performance and scalability risks"
+    constraints:
+      - "Identify inefficiencies and bottlenecks only"
+      - "Do not propose optimizations or fixes"
+      - "Focus on algorithmic complexity, resource usage, and scaling limits"
+    input_from:
+      - analyzer
+    output_schema:
+      type: object
+      properties:
+        performance_rating:
+          type: string
+          enum: ["poor", "needs_improvement", "acceptable", "good", "excellent"]
+        issues:
+          type: array
+          items:
+            type: object
+            properties:
+              issue_id:
+                type: string
+              severity:
+                type: string
+                enum: ["critical", "high", "medium", "low"]
+              type:
+                type: string
+              location:
+                type: string
+              description:
+                type: string
+        bottlenecks:
+          type: array
+          items:
+            type: string
+      required:
+        - performance_rating
+        - issues
+
+  - id: summarizer
+    role: "a technical lead synthesizing review findings"
+    goal: "Produce a clear, actionable code review decision"
+    constraints:
+      - "Synthesize findings without inventing fixes"
+      - "If information is missing, explicitly call it out"
+      - "Prioritize issues by severity and impact"
+      - "Base all conclusions strictly on previous outputs"
+    input_from:
+      - analyzer
+      - security_reviewer
+      - performance_reviewer
+    output_schema:
+      type: object
+      properties:
+        overall_rating:
+          type: string
+          enum: ["reject", "needs_major_changes", "needs_minor_changes", "approve", "approve_with_suggestions"]
+        summary:
+          type: string
+        critical_issues:
+          type: array
+          items:
+            type: object
+            properties:
+              issue_id:
+                type: string
+              category:
+                type: string
+              description:
+                type: string
+        suggested_improvements:
+          type: array
+          items:
+            type: object
+            properties:
+              category:
+                type: string
+              suggestion:
+                type: string
+        positive_aspects:
+          type: array
+          items:
+            type: string
+        action_items:
+          type: array
+          items:
+            type: object
+            properties:
+              priority:
+                type: integer
+              action:
+                type: string
+      required:
+        - overall_rating
+        - summary
+        - critical_issues
+        - action_items

@@ -1,0 +1,108 @@
+version: "1.0"
+name: "Task Manager Workflow"
+description: "Analyzes a task, classifies complexity, identifies required expertise, and produces an execution plan."
+
+llm:
+  provider: cascade
+  model: current
+  temperature: 0.0
+  max_tokens: 4096
+
+agents:
+  - id: classifier
+    role: "a technical program manager who understands the codebase architecture"
+    goal: "Classify the task and determine the optimal execution approach"
+    constraints:
+      - "Use MCP tools to understand the scope of the task before classifying"
+      - "Be honest about uncertainty — if scope is unclear, say so"
+      - "Do not start implementing — only analyze and recommend"
+      - "Consider the three tiers: default (simple diff), focused expert (domain expertise needed), multiagency (multiple perspectives needed)"
+    input_from: []
+    output_schema:
+      type: object
+      properties:
+        task_summary:
+          type: string
+          description: "Clear one-line summary of the task"
+        task_type:
+          type: string
+          enum: ["bug_fix", "feature", "refactor", "domain_change", "integration", "frontend", "infrastructure", "documentation"]
+        affected_systems:
+          type: array
+          items:
+            type: string
+        risk_level:
+          type: string
+          enum: ["low", "medium", "high", "critical"]
+        recommended_tier:
+          type: string
+          enum: ["default", "focused_expert", "multiagency"]
+        recommended_workflow:
+          type: string
+          description: "If multiagency, which workflow spec to use"
+          enum: ["design.yaml", "code_review.yaml", "evolution_audit.yaml", "none"]
+        rationale:
+          type: string
+        known_unknowns:
+          type: array
+          items:
+            type: string
+        suggested_approach:
+          type: array
+          items:
+            type: string
+      required:
+        - task_summary
+        - task_type
+        - risk_level
+        - recommended_tier
+        - rationale
+        - suggested_approach
+
+  - id: planner
+    role: "a senior engineer who creates concrete, actionable implementation plans"
+    goal: "Turn the classification into a specific execution plan with files, changes, and verification steps"
+    constraints:
+      - "Base the plan strictly on the classifier's analysis"
+      - "Identify specific files that need to change"
+      - "Include verification steps (compile checks, tests)"
+      - "Do not start implementing — only plan"
+      - "If the classifier recommended multiagency, produce the exact command to run"
+    input_from:
+      - classifier
+    output_schema:
+      type: object
+      properties:
+        execution_tier:
+          type: string
+          enum: ["default", "focused_expert", "multiagency"]
+        expert_persona:
+          type: string
+          description: "If focused_expert, the expert role description to adopt"
+        multiagency_command:
+          type: string
+          description: "If multiagency, the exact /multiagency command to run"
+        implementation_steps:
+          type: array
+          items:
+            type: object
+            properties:
+              step:
+                type: string
+              files:
+                type: array
+                items:
+                  type: string
+              verification:
+                type: string
+        estimated_complexity:
+          type: string
+          enum: ["trivial", "small", "medium", "large", "very_large"]
+        risks:
+          type: array
+          items:
+            type: string
+      required:
+        - execution_tier
+        - implementation_steps
+        - estimated_complexity

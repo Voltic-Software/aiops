@@ -1,0 +1,135 @@
+package agent
+
+import (
+	"encoding/json"
+	"fmt"
+	"strings"
+
+	"{{.MultiagencyMod}}/internal/spec"
+)
+
+// PromptBuilder builds prompts for agent execution
+type PromptBuilder struct{}
+
+// NewPromptBuilder creates a new prompt builder
+func NewPromptBuilder() *PromptBuilder {
+	return &PromptBuilder{}
+}
+
+// BuildSystemPrompt builds the system prompt for an agent
+func (b *PromptBuilder) BuildSystemPrompt(agent *spec.Agent) string {
+	var sb strings.Builder
+
+	sb.WriteString(fmt.Sprintf("You are %s.\n\n", agent.Role))
+	sb.WriteString(fmt.Sprintf("Goal: %s\n\n", agent.Goal))
+
+	if len(agent.Constraints) > 0 {
+		sb.WriteString("Constraints:\n")
+		for _, constraint := range agent.Constraints {
+			sb.WriteString(fmt.Sprintf("- %s\n", constraint))
+		}
+		sb.WriteString("\n")
+	}
+
+	sb.WriteString("IMPORTANT: You MUST respond with valid JSON matching the specified output format. ")
+	sb.WriteString("Do not include any text before or after the JSON. ")
+	sb.WriteString("Do not use markdown code blocks. Just output raw JSON.\n")
+
+	return sb.String()
+}
+
+// BuildUserPrompt builds the user prompt for an agent
+func (b *PromptBuilder) BuildUserPrompt(task string, context map[string]interface{}, outputSchema *spec.OutputSchema) string {
+	var sb strings.Builder
+
+	sb.WriteString("TASK:\n")
+	sb.WriteString(task)
+	sb.WriteString("\n\n")
+
+	if len(context) > 0 {
+		sb.WriteString("CONTEXT FROM PREVIOUS AGENTS:\n")
+		for agentID, output := range context {
+			sb.WriteString(fmt.Sprintf("\n--- Output from %s ---\n", agentID))
+			jsonOutput, err := json.MarshalIndent(output, "", "  ")
+			if err != nil {
+				sb.WriteString(fmt.Sprintf("%v", output))
+			} else {
+				sb.WriteString(string(jsonOutput))
+			}
+			sb.WriteString("\n")
+		}
+		sb.WriteString("\n")
+	}
+
+	sb.WriteString("OUTPUT FORMAT (JSON):\n")
+	schemaJSON := b.schemaToExample(outputSchema)
+	sb.WriteString(schemaJSON)
+	sb.WriteString("\n")
+
+	return sb.String()
+}
+
+func (b *PromptBuilder) schemaToExample(schema *spec.OutputSchema) string {
+	if schema == nil {
+		return `{"result": "string"}`
+	}
+
+	example := b.buildSchemaExample(schema)
+	jsonBytes, err := json.MarshalIndent(example, "", "  ")
+	if err != nil {
+		return `{"result": "string"}`
+	}
+	return string(jsonBytes)
+}
+
+func (b *PromptBuilder) buildSchemaExample(schema *spec.OutputSchema) interface{} {
+	switch schema.Type {
+	case "object":
+		result := make(map[string]interface{})
+		for name, field := range schema.Properties {
+			result[name] = b.buildFieldExample(&field)
+		}
+		return result
+	case "array":
+		if schema.Items != nil {
+			return []interface{}{b.buildFieldExample(schema.Items)}
+		}
+		return []interface{}{}
+	default:
+		return "string"
+	}
+}
+
+func (b *PromptBuilder) buildFieldExample(field *spec.SchemaField) interface{} {
+	desc := field.Description
+	if desc == "" {
+		desc = field.Type
+	}
+
+	switch field.Type {
+	case "string":
+		if len(field.Enum) > 0 {
+			return fmt.Sprintf("<%s: one of %v>", desc, field.Enum)
+		}
+		return fmt.Sprintf("<%s>", desc)
+	case "number":
+		return fmt.Sprintf("<%s: number>", desc)
+	case "integer":
+		return fmt.Sprintf("<%s: integer>", desc)
+	case "boolean":
+		return fmt.Sprintf("<%s: true/false>", desc)
+	case "array":
+		if field.Items != nil {
+			return []interface{}{b.buildFieldExample(field.Items)}
+		}
+		return []interface{}{fmt.Sprintf("<%s>", desc)}
+	case "object":
+		result := make(map[string]interface{})
+		for name, subField := range field.Properties {
+			result[name] = b.buildFieldExample(&subField)
+		}
+		return result
+	default:
+		return fmt.Sprintf("<%s>", desc)
+	}
+}

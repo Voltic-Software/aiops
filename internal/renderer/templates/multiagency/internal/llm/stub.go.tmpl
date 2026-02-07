@@ -1,0 +1,133 @@
+package llm
+
+import (
+	"context"
+	"encoding/json"
+	"strings"
+)
+
+// StubClient implements the Client interface for testing
+type StubClient struct {
+	responses map[string]string
+}
+
+// NewStubClient creates a new stub client for testing
+func NewStubClient() *StubClient {
+	return &StubClient{
+		responses: make(map[string]string),
+	}
+}
+
+// SetResponse sets a canned response for a specific agent role
+func (c *StubClient) SetResponse(role string, response string) {
+	c.responses[role] = response
+}
+
+// Complete returns a stub response based on the system prompt
+func (c *StubClient) Complete(ctx context.Context, req *Request) (*Response, error) {
+	role := extractRole(req.SystemPrompt)
+
+	if resp, ok := c.responses[role]; ok {
+		return &Response{
+			Content:      resp,
+			Model:        "stub",
+			InputTokens:  len(req.SystemPrompt) + len(req.UserPrompt),
+			OutputTokens: len(resp),
+			StopReason:   "end_turn",
+		}, nil
+	}
+
+	stubResponse := generateStubResponse(req.UserPrompt)
+
+	return &Response{
+		Content:      stubResponse,
+		Model:        "stub",
+		InputTokens:  len(req.SystemPrompt) + len(req.UserPrompt),
+		OutputTokens: len(stubResponse),
+		StopReason:   "end_turn",
+	}, nil
+}
+
+func extractRole(systemPrompt string) string {
+	lines := strings.Split(systemPrompt, "\n")
+	for _, line := range lines {
+		if strings.HasPrefix(line, "You are ") {
+			role := strings.TrimPrefix(line, "You are ")
+			role = strings.TrimSuffix(role, ".")
+			return role
+		}
+	}
+	return "unknown"
+}
+
+func generateStubResponse(userPrompt string) string {
+	outputIdx := strings.Index(userPrompt, "OUTPUT FORMAT (JSON):")
+	if outputIdx == -1 {
+		return `{"result": "stub response"}`
+	}
+
+	schemaStr := userPrompt[outputIdx+len("OUTPUT FORMAT (JSON):"):]
+	schemaStr = strings.TrimSpace(schemaStr)
+
+	var schema map[string]interface{}
+	if err := json.Unmarshal([]byte(schemaStr), &schema); err != nil {
+		return `{"result": "stub response", "status": "success"}`
+	}
+
+	result := generateStubValues(schema)
+
+	jsonBytes, err := json.MarshalIndent(result, "", "  ")
+	if err != nil {
+		return `{"result": "stub response"}`
+	}
+
+	return string(jsonBytes)
+}
+
+func generateConcreteValue(value interface{}) interface{} {
+	switch v := value.(type) {
+	case string:
+		if strings.HasPrefix(v, "<") && strings.HasSuffix(v, ">") {
+			inner := strings.Trim(v, "<>")
+			if strings.Contains(inner, ": true/false") || strings.Contains(inner, "boolean") {
+				return true
+			}
+			if strings.Contains(inner, ": number") || strings.Contains(inner, ": integer") {
+				return 42
+			}
+			if strings.Contains(inner, "one of") {
+				parts := strings.Split(inner, "[")
+				if len(parts) > 1 {
+					enumPart := strings.Split(parts[1], "]")[0]
+					values := strings.Split(enumPart, " ")
+					if len(values) > 0 {
+						return strings.Trim(values[0], "\"',")
+					}
+				}
+			}
+			return "stub_" + strings.Split(inner, ":")[0]
+		}
+		return v
+	case map[string]interface{}:
+		result := make(map[string]interface{})
+		for k, val := range v {
+			result[k] = generateConcreteValue(val)
+		}
+		return result
+	case []interface{}:
+		if len(v) > 0 {
+			return []interface{}{generateConcreteValue(v[0])}
+		}
+		return []interface{}{"stub_item"}
+	default:
+		return v
+	}
+}
+
+func generateStubValues(schema map[string]interface{}) map[string]interface{} {
+	result := make(map[string]interface{})
+	for key, value := range schema {
+		result[key] = generateConcreteValue(value)
+	}
+	return result
+}

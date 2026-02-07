@@ -1,0 +1,138 @@
+package spec
+
+// WorkflowSpec defines a complete multi-agent workflow
+type WorkflowSpec struct {
+	Version     string    `yaml:"version"`
+	Name        string    `yaml:"name"`
+	Description string    `yaml:"description"`
+	LLM         LLMConfig `yaml:"llm"`
+	Agents      []Agent   `yaml:"agents"`
+}
+
+// LLMConfig defines the LLM provider configuration
+type LLMConfig struct {
+	Provider    string  `yaml:"provider"`
+	Model       string  `yaml:"model"`
+	Temperature float64 `yaml:"temperature"`
+	MaxTokens   int     `yaml:"max_tokens"`
+}
+
+// Agent defines a single agent in the workflow
+type Agent struct {
+	ID           string       `yaml:"id"`
+	Role         string       `yaml:"role"`
+	Goal         string       `yaml:"goal"`
+	Constraints  []string     `yaml:"constraints"`
+	InputFrom    []string     `yaml:"input_from"`
+	OutputSchema OutputSchema `yaml:"output_schema"`
+	MCPTools     []string     `yaml:"mcp_tools"`
+}
+
+// OutputSchema defines the expected JSON output structure
+type OutputSchema struct {
+	Type       string                 `yaml:"type"`
+	Properties map[string]SchemaField `yaml:"properties"`
+	Required   []string               `yaml:"required"`
+	Items      *SchemaField           `yaml:"items"`
+}
+
+// SchemaField defines a single field in the output schema
+type SchemaField struct {
+	Type        string                 `yaml:"type"`
+	Description string                 `yaml:"description"`
+	Properties  map[string]SchemaField `yaml:"properties"`
+	Items       *SchemaField           `yaml:"items"`
+	Enum        []string               `yaml:"enum"`
+}
+
+// Validate checks if the workflow spec is valid
+func (w *WorkflowSpec) Validate() error {
+	if w.Version == "" {
+		return &ValidationError{Field: "version", Message: "version is required"}
+	}
+	if w.Name == "" {
+		return &ValidationError{Field: "name", Message: "name is required"}
+	}
+	if len(w.Agents) == 0 {
+		return &ValidationError{Field: "agents", Message: "at least one agent is required"}
+	}
+
+	if err := w.LLM.Validate(); err != nil {
+		return err
+	}
+
+	agentIDs := make(map[string]int)
+	for i, agent := range w.Agents {
+		agentIDs[agent.ID] = i
+	}
+
+	for i, agent := range w.Agents {
+		if err := agent.Validate(i, agentIDs); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+// Validate checks if the LLM config is valid
+func (l *LLMConfig) Validate() error {
+	if l.Provider == "" {
+		return &ValidationError{Field: "llm.provider", Message: "provider is required"}
+	}
+	validProviders := map[string]bool{"anthropic": true, "openai": true, "stub": true, "cascade": true}
+	if !validProviders[l.Provider] {
+		return &ValidationError{Field: "llm.provider", Message: "provider must be one of: anthropic, openai, stub, cascade"}
+	}
+	if l.Model == "" {
+		return &ValidationError{Field: "llm.model", Message: "model is required"}
+	}
+	if l.Temperature < 0 || l.Temperature > 1 {
+		return &ValidationError{Field: "llm.temperature", Message: "temperature must be between 0 and 1"}
+	}
+	if l.MaxTokens <= 0 {
+		l.MaxTokens = 4096
+	}
+	return nil
+}
+
+// Validate checks if the agent definition is valid
+func (a *Agent) Validate(index int, agentIDs map[string]int) error {
+	if a.ID == "" {
+		return &ValidationError{Field: "agents[].id", Message: "agent id is required"}
+	}
+	if a.Role == "" {
+		return &ValidationError{Field: "agents[].role", Message: "agent role is required"}
+	}
+	if a.Goal == "" {
+		return &ValidationError{Field: "agents[].goal", Message: "agent goal is required"}
+	}
+
+	for _, inputID := range a.InputFrom {
+		refIndex, exists := agentIDs[inputID]
+		if !exists {
+			return &ValidationError{
+				Field:   "agents[].input_from",
+				Message: "agent '" + a.ID + "' references unknown agent '" + inputID + "'",
+			}
+		}
+		if refIndex >= index {
+			return &ValidationError{
+				Field:   "agents[].input_from",
+				Message: "agent '" + a.ID + "' cannot reference agent '" + inputID + "' that comes after it",
+			}
+		}
+	}
+
+	return nil
+}
+
+// ValidationError represents a spec validation error
+type ValidationError struct {
+	Field   string
+	Message string
+}
+
+func (e *ValidationError) Error() string {
+	return "validation error in " + e.Field + ": " + e.Message
+}

@@ -1,0 +1,198 @@
+package agent
+
+import (
+	"context"
+	"encoding/json"
+	"fmt"
+	"strings"
+
+	"{{.MultiagencyMod}}/internal/llm"
+	"{{.MultiagencyMod}}/internal/spec"
+)
+
+// Executor executes a single agent
+type Executor struct {
+	client        llm.Client
+	promptBuilder *PromptBuilder
+	maxRetries    int
+}
+
+// NewExecutor creates a new agent executor
+func NewExecutor(client llm.Client) *Executor {
+	return &Executor{
+		client:        client,
+		promptBuilder: NewPromptBuilder(),
+		maxRetries:    3,
+	}
+}
+
+// ExecutionResult represents the result of an agent execution
+type ExecutionResult struct {
+	AgentID      string                 `json:"agent_id"`
+	Output       map[string]interface{} `json:"output"`
+	RawResponse  string                 `json:"raw_response"`
+	InputTokens  int                    `json:"input_tokens"`
+	OutputTokens int                    `json:"output_tokens"`
+	Retries      int                    `json:"retries"`
+}
+
+// Execute runs a single agent with the given task and context
+func (e *Executor) Execute(ctx context.Context, agent *spec.Agent, task string, agentContext map[string]interface{}, llmConfig *spec.LLMConfig) (*ExecutionResult, error) {
+	systemPrompt := e.promptBuilder.BuildSystemPrompt(agent)
+	userPrompt := e.promptBuilder.BuildUserPrompt(task, agentContext, &agent.OutputSchema)
+
+	var lastErr error
+	var lastResponse string
+
+	for retry := 0; retry <= e.maxRetries; retry++ {
+		req := &llm.Request{
+			SystemPrompt: systemPrompt,
+			UserPrompt:   userPrompt,
+			Model:        llmConfig.Model,
+			Temperature:  llmConfig.Temperature,
+			MaxTokens:    llmConfig.MaxTokens,
+		}
+
+		if retry > 0 && lastErr != nil {
+			req.UserPrompt = fmt.Sprintf("%s\n\nPREVIOUS ATTEMPT FAILED:\nError: %s\nYour response was: %s\n\nPlease fix the error and respond with valid JSON only.",
+				userPrompt, lastErr.Error(), lastResponse)
+		}
+
+		resp, err := e.client.Complete(ctx, req)
+		if err != nil {
+			lastErr = fmt.Errorf("LLM call failed: %w", err)
+			continue
+		}
+
+		lastResponse = resp.Content
+
+		output, err := e.parseResponse(resp.Content)
+		if err != nil {
+			lastErr = fmt.Errorf("failed to parse response as JSON: %w", err)
+			continue
+		}
+
+		if err := e.validateOutput(output, &agent.OutputSchema); err != nil {
+			lastErr = fmt.Errorf("output validation failed: %w", err)
+			continue
+		}
+
+		return &ExecutionResult{
+			AgentID:      agent.ID,
+			Output:       output,
+			RawResponse:  resp.Content,
+			InputTokens:  resp.InputTokens,
+			OutputTokens: resp.OutputTokens,
+			Retries:      retry,
+		}, nil
+	}
+
+	return nil, fmt.Errorf("agent '%s' failed after %d retries: %w", agent.ID, e.maxRetries, lastErr)
+}
+
+func (e *Executor) parseResponse(content string) (map[string]interface{}, error) {
+	content = strings.TrimSpace(content)
+
+	if strings.Contains(content, "```") {
+		content = extractJSONFromMarkdown(content)
+	}
+
+	var result map[string]interface{}
+	if err := json.Unmarshal([]byte(content), &result); err != nil {
+		return nil, fmt.Errorf("invalid JSON: %w (content: %s)", err, truncate(content, 200))
+	}
+
+	return result, nil
+}
+
+func extractJSONFromMarkdown(content string) string {
+	patterns := []string{"```json\n", "```\n"}
+	for _, pattern := range patterns {
+		start := strings.Index(content, pattern)
+		if start != -1 {
+			start += len(pattern)
+			end := strings.Index(content[start:], "```")
+			if end != -1 {
+				return strings.TrimSpace(content[start : start+end])
+			}
+		}
+	}
+	return content
+}
+
+func (e *Executor) validateOutput(output map[string]interface{}, schema *spec.OutputSchema) error {
+	if schema == nil {
+		return nil
+	}
+
+	for _, required := range schema.Required {
+		if _, ok := output[required]; !ok {
+			return fmt.Errorf("missing required field: %s", required)
+		}
+	}
+
+	for name, field := range schema.Properties {
+		value, exists := output[name]
+		if !exists {
+			continue
+		}
+		if err := e.validateField(name, value, &field); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+func (e *Executor) validateField(name string, value interface{}, field *spec.SchemaField) error {
+	if value == nil {
+		return nil
+	}
+
+	switch field.Type {
+	case "string":
+		if _, ok := value.(string); !ok {
+			return fmt.Errorf("field '%s' must be a string", name)
+		}
+		if len(field.Enum) > 0 {
+			strVal := value.(string)
+			valid := false
+			for _, allowed := range field.Enum {
+				if strVal == allowed {
+					valid = true
+					break
+				}
+			}
+			if !valid {
+				return fmt.Errorf("field '%s' must be one of %v", name, field.Enum)
+			}
+		}
+	case "number", "integer":
+		switch value.(type) {
+		case float64, int, int64:
+		default:
+			return fmt.Errorf("field '%s' must be a number", name)
+		}
+	case "boolean":
+		if _, ok := value.(bool); !ok {
+			return fmt.Errorf("field '%s' must be a boolean", name)
+		}
+	case "array":
+		if _, ok := value.([]interface{}); !ok {
+			return fmt.Errorf("field '%s' must be an array", name)
+		}
+	case "object":
+		if _, ok := value.(map[string]interface{}); !ok {
+			return fmt.Errorf("field '%s' must be an object", name)
+		}
+	}
+
+	return nil
+}
+
+func truncate(s string, maxLen int) string {
+	if len(s) <= maxLen {
+		return s
+	}
+	return s[:maxLen] + "..."
+}

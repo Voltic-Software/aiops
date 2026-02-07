@@ -1,0 +1,42 @@
+---
+description: Execute a multi-agent workflow for complex tasks requiring multiple perspectives
+---
+
+# Multi-Agent Workflow Executor
+
+When the user runs `/multiagency`, execute a multi-agent workflow from a YAML spec file.
+
+## Usage
+
+```
+/multiagency [workflow] [task description]
+```
+
+## Available Workflows
+
+| Workflow | Purpose |
+|---|---|
+| `design.yaml` | Architecture and system design (Architect → Critic → Fixer → Finalizer) |
+| `code_review.yaml` | Code review (Analyzer → Security → Performance → Summarizer) |
+| `manager.yaml` | Task classification and planning (Classifier → Planner) |
+| `evolution_audit.yaml` | Knowledge freshness audit (Discovery → Proposal) |
+
+## Execution Steps
+
+1. **Read the spec**: Load the YAML file from `{{.Project.Name}}/multiagency/specs/`
+2. **For each agent in order**:
+   a. Adopt the agent's `role` as your persona
+   b. Work toward the agent's `goal`
+   c. Follow all `constraints`
+   d. If `mcp_tools` are listed, use them to gather context
+   e. If `input_from` lists previous agents, incorporate their outputs
+   f. Produce output matching the `output_schema`
+3. **Present final output** to the user
+
+## Rules
+
+- Execute agents sequentially, not in parallel
+- Each agent output feeds into subsequent agents via `input_from`
+- Do not skip agents or combine steps
+- If an agent's output reveals the task is simpler than expected, say so
+- All outputs should be structured JSON matching the schema

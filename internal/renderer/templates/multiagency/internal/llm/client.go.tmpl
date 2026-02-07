@@ -1,0 +1,50 @@
+package llm
+
+import (
+	"context"
+)
+
+// Client defines the interface for LLM providers
+type Client interface {
+	Complete(ctx context.Context, req *Request) (*Response, error)
+}
+
+// Request represents a request to the LLM
+type Request struct {
+	SystemPrompt string  `json:"system_prompt"`
+	UserPrompt   string  `json:"user_prompt"`
+	Model        string  `json:"model"`
+	Temperature  float64 `json:"temperature"`
+	MaxTokens    int     `json:"max_tokens"`
+}
+
+// Response represents a response from the LLM
+type Response struct {
+	Content      string `json:"content"`
+	Model        string `json:"model"`
+	InputTokens  int    `json:"input_tokens"`
+	OutputTokens int    `json:"output_tokens"`
+	StopReason   string `json:"stop_reason"`
+}
+
+// NewClient creates a new LLM client based on the provider
+func NewClient(provider string, apiKey string) (Client, error) {
+	switch provider {
+	case "anthropic":
+		return NewAnthropicClient(apiKey), nil
+	case "stub":
+		return NewStubClient(), nil
+	default:
+		return nil, &ProviderError{Provider: provider, Message: "unsupported provider"}
+	}
+}
+
+// ProviderError represents an error with the LLM provider
+type ProviderError struct {
+	Provider string
+	Message  string
+}
+
+func (e *ProviderError) Error() string {
+	return "llm provider error (" + e.Provider + "): " + e.Message
+}

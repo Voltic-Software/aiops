@@ -1,0 +1,124 @@
+version: "1.0"
+name: "Codebase Evolution Audit"
+description: "Detects meaningful changes in how the codebase works, assesses impact on agent knowledge, and proposes updates to shared knowledge artifacts."
+
+llm:
+  provider: cascade
+  model: current
+  temperature: 0.0
+  max_tokens: 8192
+
+agents:
+  - id: discovery
+    role: "a meticulous codebase librarian who tracks structural and capability changes — generators, DSLs, shared infrastructure, architectural patterns, and conventions"
+    goal: "Identify meaningful changes in the codebase since the last audit and assess their significance"
+    constraints:
+      - "Focus ONLY on meaningful changes: new generators, new capabilities, new architectural patterns, deprecations, behavioral changes"
+      - "IGNORE: minor refactors, stylistic changes, individual bug fixes, routine feature additions"
+      - "For each change found, assess confidence level (high/medium/low) and explain WHY it matters"
+      - "Compare current codebase state against knowledge artifacts to find drift"
+      - "Check .windsurf/orchestrator/session_state.yaml directive_log for repeated @directive overrides — patterns reveal where default rules need tuning"
+      - "Do NOT propose fixes — only discover and document what changed"
+    input_from: []
+    output_schema:
+      type: object
+      properties:
+        audit_date:
+          type: string
+          description: "ISO date of this audit"
+        changes_found:
+          type: array
+          description: "List of meaningful changes discovered"
+          items:
+            type: object
+            properties:
+              category:
+                type: string
+                enum: ["capability", "generator", "architecture", "convention", "deprecation", "new_domain", "integration_change", "frontend_change", "infrastructure", "override_pattern"]
+              description:
+                type: string
+              evidence:
+                type: string
+              confidence:
+                type: string
+                enum: ["high", "medium", "low"]
+              significance:
+                type: string
+                enum: ["breaking", "additive", "informational"]
+              affected_artifacts:
+                type: array
+                items:
+                  type: string
+        stale_knowledge:
+          type: array
+          description: "Knowledge artifacts that are confirmed stale"
+          items:
+            type: object
+            properties:
+              artifact:
+                type: string
+              what_is_stale:
+                type: string
+              current_state:
+                type: string
+              severity:
+                type: string
+                enum: ["critical", "high", "medium", "low"]
+        summary:
+          type: string
+          description: "One-paragraph executive summary of findings"
+      required:
+        - audit_date
+        - changes_found
+        - stale_knowledge
+        - summary
+
+  - id: proposal
+    role: "a precise technical writer who translates codebase changes into concrete updates for knowledge artifacts"
+    goal: "Produce specific, actionable update proposals for every stale knowledge artifact, with justification and risk assessment"
+    constraints:
+      - "Base proposals strictly on the discovery agent's findings — do not invent changes"
+      - "For each proposal, provide the EXACT content to add/modify/remove"
+      - "Include justification: why this update matters and what goes wrong without it"
+      - "Prioritize proposals: critical > high > medium > low"
+      - "NEVER auto-apply — all proposals are for human review"
+      - "Group proposals by artifact for easy review"
+    input_from:
+      - discovery
+    output_schema:
+      type: object
+      properties:
+        proposals:
+          type: array
+          description: "Ordered list of update proposals"
+          items:
+            type: object
+            properties:
+              id:
+                type: string
+                description: "Unique proposal ID (e.g., P-001)"
+              artifact:
+                type: string
+                description: "Which file or resource to update"
+              priority:
+                type: string
+                enum: ["critical", "high", "medium", "low"]
+              action:
+                type: string
+                enum: ["add", "modify", "remove", "replace"]
+              description:
+                type: string
+              current_content:
+                type: string
+              proposed_content:
+                type: string
+              justification:
+                type: string
+              risk_of_not_updating:
+                type: string
+        summary:
+          type: string
+          description: "Executive summary: how many proposals, how many critical, overall health"
+      required:
+        - proposals
+        - summary

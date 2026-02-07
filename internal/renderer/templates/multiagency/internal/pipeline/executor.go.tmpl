@@ -1,0 +1,118 @@
+package pipeline
+
+import (
+	"context"
+	"encoding/json"
+	"fmt"
+	"io"
+	"os"
+
+	"{{.MultiagencyMod}}/internal/agent"
+	"{{.MultiagencyMod}}/internal/llm"
+	"{{.MultiagencyMod}}/internal/spec"
+)
+
+// Executor orchestrates the execution of a multi-agent pipeline
+type Executor struct {
+	spec          *spec.WorkflowSpec
+	llmClient     llm.Client
+	agentExecutor *agent.Executor
+	output        io.Writer
+	verbose       bool
+}
+
+// NewExecutor creates a new pipeline executor
+func NewExecutor(workflowSpec *spec.WorkflowSpec, llmClient llm.Client) *Executor {
+	return &Executor{
+		spec:          workflowSpec,
+		llmClient:     llmClient,
+		agentExecutor: agent.NewExecutor(llmClient),
+		output:        os.Stdout,
+		verbose:       false,
+	}
+}
+
+// SetOutput sets the output writer for progress messages
+func (e *Executor) SetOutput(w io.Writer) {
+	e.output = w
+}
+
+// SetVerbose enables verbose output
+func (e *Executor) SetVerbose(verbose bool) {
+	e.verbose = verbose
+}
+
+// PipelineResult represents the final result of a pipeline execution
+type PipelineResult struct {
+	WorkflowName string                            `json:"workflow_name"`
+	Task         string                            `json:"task"`
+	FinalOutput  map[string]interface{}            `json:"final_output"`
+	AllOutputs   map[string]*agent.ExecutionResult `json:"all_outputs,omitempty"`
+	TokenUsage   TokenUsage                        `json:"token_usage"`
+	DurationMs   int64                             `json:"duration_ms"`
+	AgentCount   int                               `json:"agent_count"`
+}
+
+// Execute runs the entire pipeline
+func (e *Executor) Execute(ctx context.Context, task string) (*PipelineResult, error) {
+	execCtx := NewExecutionContext(task)
+
+	e.log("Starting workflow: %s\n", e.spec.Name)
+	e.log("Task: %s\n", task)
+	e.log("Agents: %d\n\n", len(e.spec.Agents))
+
+	for i, agentSpec := range e.spec.Agents {
+		execCtx.SetCurrentAgent(agentSpec.ID)
+
+		e.log("[%d/%d] Executing agent: %s\n", i+1, len(e.spec.Agents), agentSpec.ID)
+		e.log("  Role: %s\n", agentSpec.Role)
+
+		agentContext := execCtx.GetOutputsFor(agentSpec.InputFrom)
+		if len(agentSpec.InputFrom) > 0 {
+			e.log("  Using context from: %v\n", agentSpec.InputFrom)
+		}
+
+		result, err := e.agentExecutor.Execute(ctx, &agentSpec, task, agentContext, &e.spec.LLM)
+		if err != nil {
+			return nil, fmt.Errorf("agent '%s' failed: %w", agentSpec.ID, err)
+		}
+
+		execCtx.SetOutput(agentSpec.ID, result)
+
+		e.log("  ✓ Completed (tokens: %d in, %d out", result.InputTokens, result.OutputTokens)
+		if result.Retries > 0 {
+			e.log(", retries: %d", result.Retries)
+		}
+		e.log(")\n")
+
+		if e.verbose {
+			outputJSON, _ := json.MarshalIndent(result.Output, "    ", "  ")
+			e.log("  Output: %s\n", string(outputJSON))
+		}
+		e.log("\n")
+	}
+
+	execCtx.Complete()
+
+	lastAgent := e.spec.Agents[len(e.spec.Agents)-1]
+	finalResult, _ := execCtx.GetOutput(lastAgent.ID)
+
+	result := &PipelineResult{
+		WorkflowName: e.spec.Name,
+		Task:         task,
+		FinalOutput:  finalResult.Output,
+		AllOutputs:   execCtx.AllOutputs(),
+		TokenUsage:   execCtx.TotalTokens(),
+		DurationMs:   execCtx.Duration().Milliseconds(),
+		AgentCount:   len(e.spec.Agents),
+	}
+
+	e.log("Pipeline completed in %dms\n", result.DurationMs)
+	e.log("Total tokens: %d input, %d output\n", result.TokenUsage.InputTokens, result.TokenUsage.OutputTokens)
+
+	return result, nil
+}
+
+func (e *Executor) log(format string, args ...interface{}) {
+	fmt.Fprintf(e.output, format, args...)
+}

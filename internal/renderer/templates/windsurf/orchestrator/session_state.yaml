@@ -1,0 +1,27 @@
+# Session Coordination State
+# This file is the shared blackboard for cross-session coordination.
+# Any Cascade session can read and update this file.
+# Sessions synchronize through state, not through direct communication.
+#
+# Rules:
+# 1. Only update YOUR session entry — never modify another session's entry
+# 2. Locks are advisory — they signal intent, not hard blocks
+# 3. Expired locks should be cleaned up by the orchestrator
+# 4. Always check locks before attempting fixes in shared areas
+
+# Active sessions — each entry represents a workstream
+active_sessions: []
+
+# Area locks — advisory ownership claims over codebase areas
+# Agents MUST check these before attempting fixes in locked areas
+locks: []
+
+# Completed sessions — recent history for context
+completed_sessions: []
+
+# Global notes — cross-cutting information any session should know
+global_notes: []
+
+# Directive log — tracks @directive overrides for evolution analysis
+# The evolution audit reads this to detect patterns that signal rule tuning needs
+directive_log: []

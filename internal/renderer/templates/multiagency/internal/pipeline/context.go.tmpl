@@ -1,0 +1,120 @@
+package pipeline
+
+import (
+	"sync"
+	"time"
+
+	"{{.MultiagencyMod}}/internal/agent"
+)
+
+// ExecutionContext holds the state during pipeline execution
+type ExecutionContext struct {
+	mu           sync.RWMutex
+	task         string
+	outputs      map[string]*agent.ExecutionResult
+	startTime    time.Time
+	endTime      time.Time
+	currentAgent string
+	totalTokens  TokenUsage
+}
+
+// TokenUsage tracks token consumption
+type TokenUsage struct {
+	InputTokens  int `json:"input_tokens"`
+	OutputTokens int `json:"output_tokens"`
+}
+
+// NewExecutionContext creates a new execution context
+func NewExecutionContext(task string) *ExecutionContext {
+	return &ExecutionContext{
+		task:      task,
+		outputs:   make(map[string]*agent.ExecutionResult),
+		startTime: time.Now(),
+	}
+}
+
+// Task returns the original task
+func (c *ExecutionContext) Task() string {
+	return c.task
+}
+
+// SetOutput stores the output from an agent
+func (c *ExecutionContext) SetOutput(agentID string, result *agent.ExecutionResult) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.outputs[agentID] = result
+	c.totalTokens.InputTokens += result.InputTokens
+	c.totalTokens.OutputTokens += result.OutputTokens
+}
+
+// GetOutput retrieves the output from a specific agent
+func (c *ExecutionContext) GetOutput(agentID string) (*agent.ExecutionResult, bool) {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	result, ok := c.outputs[agentID]
+	return result, ok
+}
+
+// GetOutputsFor retrieves outputs from multiple agents as a context map
+func (c *ExecutionContext) GetOutputsFor(agentIDs []string) map[string]interface{} {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+
+	result := make(map[string]interface{})
+	for _, id := range agentIDs {
+		if output, ok := c.outputs[id]; ok {
+			result[id] = output.Output
+		}
+	}
+	return result
+}
+
+// AllOutputs returns all agent outputs
+func (c *ExecutionContext) AllOutputs() map[string]*agent.ExecutionResult {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+
+	result := make(map[string]*agent.ExecutionResult)
+	for k, v := range c.outputs {
+		result[k] = v
+	}
+	return result
+}
+
+// SetCurrentAgent sets the currently executing agent
+func (c *ExecutionContext) SetCurrentAgent(agentID string) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.currentAgent = agentID
+}
+
+// CurrentAgent returns the currently executing agent
+func (c *ExecutionContext) CurrentAgent() string {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	return c.currentAgent
+}
+
+// Complete marks the execution as complete
+func (c *ExecutionContext) Complete() {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.endTime = time.Now()
+}
+
+// Duration returns the execution duration
+func (c *ExecutionContext) Duration() time.Duration {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	if c.endTime.IsZero() {
+		return time.Since(c.startTime)
+	}
+	return c.endTime.Sub(c.startTime)
+}
+
+// TotalTokens returns the total token usage
+func (c *ExecutionContext) TotalTokens() TokenUsage {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	return c.totalTokens
+}

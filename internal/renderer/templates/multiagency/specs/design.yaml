@@ -1,0 +1,225 @@
+version: "1.0"
+name: "System Design Workflow"
+
+llm:
+  provider: cascade
+  model: current
+  temperature: 0.0
+  max_tokens: 4096
+
+agents:
+  - id: architect
+    role: "You are a senior software architect specializing in distributed systems. You prioritize clear component boundaries, explicit tradeoffs, and scalability concerns."
+    goal: "Analyze the task and propose a high-level system architecture"
+    constraints:
+      - "Focus on scalability, reliability, and maintainability"
+      - "Consider both functional and non-functional requirements"
+      - "Emphasize components, responsibilities, and data flows"
+      - "Explicitly state assumptions and tradeoffs"
+      - "Suggest appropriate architectural patterns and candidate technologies where relevant"
+      - "Avoid premature implementation details"
+    input_from: []
+    output_schema:
+      type: object
+      properties:
+        summary:
+          type: string
+          description: "Brief summary of the proposed architecture"
+        components:
+          type: array
+          description: "List of system components"
+          items:
+            type: object
+            properties:
+              name:
+                type: string
+              purpose:
+                type: string
+              technology:
+                type: string
+        data_flow:
+          type: string
+          description: "Description of how data flows through the system"
+        key_decisions:
+          type: array
+          description: "Important architectural decisions"
+          items:
+            type: string
+        risks_and_assumptions:
+          type: array
+          description: "Known risks or assumptions"
+          items:
+            type: string
+      required:
+        - summary
+        - components
+        - data_flow
+        - key_decisions
+
+  - id: critic
+    role: "You are a skeptical reviewer and devil's advocate."
+    goal: "Identify weaknesses, gaps, and risks in the proposed architecture."
+    constraints:
+      - "Do not suggest fixes or improvements"
+      - "Do not praise the design"
+      - "Focus on real-world failure scenarios and operational risks"
+      - "Consider edge cases, scaling limits, and reliability issues"
+      - "Prioritize issues by severity (critical, high, medium, low)"
+    input_from:
+      - architect
+    output_schema:
+      type: object
+      properties:
+        overall_assessment:
+          type: string
+        issues:
+          type: array
+          items:
+            type: object
+            properties:
+              issue_id:
+                type: string
+              severity:
+                type: string
+                enum: ["critical", "high", "medium", "low"]
+              category:
+                type: string
+              description:
+                type: string
+        missing_considerations:
+          type: array
+          items:
+            type: string
+        questions:
+          type: array
+          items:
+            type: string
+      required:
+        - overall_assessment
+        - issues
+
+  - id: fixer
+    role: "You are a pragmatic engineer focused on solutions."
+    goal: "Address the identified issues and improve the architecture."
+    constraints:
+      - "Address all critical and high severity issues"
+      - "Provide concrete solutions, not vague suggestions"
+      - "Maintain the original design intent where possible"
+      - "Avoid introducing new requirements unless necessary"
+      - "Consider implementation complexity and operational impact"
+    input_from:
+      - architect
+      - critic
+    output_schema:
+      type: object
+      properties:
+        addressed_issues:
+          type: array
+          items:
+            type: object
+            properties:
+              issue_id:
+                type: string
+              severity:
+                type: string
+                enum: ["critical", "high", "medium", "low"]
+              solution:
+                type: string
+              trade_offs:
+                type: string
+        updated_components:
+          type: array
+          items:
+            type: object
+            properties:
+              name:
+                type: string
+              changes:
+                type: string
+        deferred_issues:
+          type: array
+          items:
+            type: object
+            properties:
+              issue_id:
+                type: string
+              reason:
+                type: string
+      required:
+        - addressed_issues
+        - updated_components
+
+  - id: finalizer
+    role: "You are a technical writer and systems architect."
+    goal: "Produce the final, polished architecture document."
+    constraints:
+      - "Resolve conflicts between previous outputs explicitly"
+      - "Synthesize the improved design into a single coherent architecture"
+      - "Be clear, actionable, and concise"
+      - "Include implementation guidance suitable for a development team"
+      - "Do not introduce new architectural decisions"
+      - "If information is missing, explicitly call it out"
+    input_from:
+      - architect
+      - critic
+      - fixer
+    output_schema:
+      type: object
+      properties:
+        title:
+          type: string
+        executive_summary:
+          type: string
+        architecture:
+          type: object
+          properties:
+            components:
+              type: array
+              items:
+                type: object
+                properties:
+                  name:
+                    type: string
+                  purpose:
+                    type: string
+                  technology:
+                    type: string
+                  interfaces:
+                    type: array
+                    items:
+                      type: string
+            data_flow:
+              type: string
+            deployment:
+              type: string
+        implementation_plan:
+          type: array
+          items:
+            type: object
+            properties:
+              phase:
+                type: string
+              tasks:
+                type: array
+                items:
+                  type: string
+              duration:
+                type: string
+        risks_and_mitigations:
+          type: array
+          items:
+            type: object
+            properties:
+              risk:
+                type: string
+              mitigation:
+                type: string
+        success_criteria:
+          type: array
+          items:
+            type: string
+      required:
+        - title
+        - executive_summary
+        - architecture
+        - implementation_plan

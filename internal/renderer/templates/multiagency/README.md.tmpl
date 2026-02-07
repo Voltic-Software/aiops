@@ -1,0 +1,136 @@
+# Multiagency - Cascade-Native Multi-Agent Workflows
+
+A spec-driven multi-agent workflow system that uses **Cascade as the LLM executor**. Instead of calling external APIs, Cascade (the LLM in Windsurf) executes each agent step using its own capabilities and MCP tools.
+
+## Three-Tier Execution Model
+
+Cascade automatically classifies every task into one of three tiers:
+
+### Tier 1 — Default (Just Do It)
+
+Simple diffs, bug fixes, small features. Direct implementation following existing patterns.
+
+### Tier 2 — Focused Expert (Analyze First, Then Implement)
+
+Task needs domain expertise before writing code. Cascade Skills auto-invoke to provide reference materials and structured procedures.
+
+### Tier 3 — Multi-Agent Pipeline (`/multiagency`)
+
+Complex tasks requiring multiple perspectives. Cascade recommends escalation or the user invokes directly.
+
+**Rule:** Routing is automatic and silent. Cascade classifies the task and applies the appropriate tier without prompting.
+
+## Overview
+
+Multiagency enables structured multi-perspective analysis by:
+
+- Defining agent workflows in YAML specifications
+- Having Cascade adopt different expert personas sequentially
+- Producing structured JSON outputs at each step
+- Building on previous agent outputs for iterative refinement
+
+## Key Principles
+
+- **Cascade-Native**: No external LLM API calls - Cascade IS the executor
+- **Spec-Driven**: All behavior defined in YAML, not code
+- **Structured**: Each agent produces validated JSON output
+
+## Available Workflows
+
+| Workflow | Agents | Purpose |
+|---|---|---|
+| `design.yaml` | Architect → Critic → Fixer → Finalizer | Architecture and system design |
+| `code_review.yaml` | Analyzer → Security → Performance → Summarizer | Comprehensive code review |
+| `manager.yaml` | Classifier → Planner | Task classification and planning |
+| `evolution_audit.yaml` | Discovery → Proposal | Knowledge freshness audit |
+
+## Usage
+
+### Via Cascade (Primary)
+
+```
+/multiagency design Build a new notification service
+/multiagency code_review Review the auth middleware changes
+/multiagency manager Analyze this task and recommend approach
+```
+
+### Via CLI (Validation & Inspection)
+
+```bash
+cd multiagency
+go build -o multiagency ./cmd/multiagency
+
+# Validate a spec
+./multiagency validate -s specs/design.yaml
+
+# Show agent details
+./multiagency show -s specs/design.yaml
+
+# List available workflows
+./multiagency list -d specs/
+```
+
+## Creating Custom Workflows
+
+Create a new YAML file in `specs/`:
+
+```yaml
+version: "1.0"
+name: "My Custom Workflow"
+
+llm:
+  provider: cascade
+  model: current
+  temperature: 0.0
+  max_tokens: 4096
+
+agents:
+  - id: analyst
+    role: "a domain expert"
+    goal: "Analyze the task"
+    constraints:
+      - "Focus on the specific domain"
+    input_from: []
+    output_schema:
+      type: object
+      properties:
+        summary:
+          type: string
+      required:
+        - summary
+
+  - id: implementer
+    role: "a pragmatic engineer"
+    goal: "Create an implementation plan"
+    constraints:
+      - "Base plan on analyst's findings"
+    input_from:
+      - analyst
+    output_schema:
+      type: object
+      properties:
+        steps:
+          type: array
+          items:
+            type: string
+      required:
+        - steps
+```
+
+## Architecture
+
+```
+multiagency/
+├── cmd/multiagency/main.go     # CLI tool
+├── internal/
+│   ├── spec/                   # YAML spec parsing and validation
+│   ├── llm/                    # LLM client interface (Anthropic, stub)
+│   ├── agent/                  # Agent execution and prompt building
+│   └── pipeline/               # Pipeline orchestration
+├── specs/                      # Workflow specifications
+│   ├── design.yaml
+│   ├── code_review.yaml
+│   ├── manager.yaml
+│   └── evolution_audit.yaml
+└── README.md
+```

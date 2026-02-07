@@ -1,0 +1,101 @@
+---
+description: Default execution mode for single-agent tasks - pragmatic, codebase-grounded engineering
+---
+
+# Default Execution Mode — Reference Manual
+
+This is the expanded reference for the rules defined in `global_rules.md`. The global rules are always active; this document provides detailed examples, tables, and procedures.
+
+## MCP Tools Reference
+
+Ground your understanding before making changes. Use available MCP tools to verify assumptions against the actual codebase before writing code.
+
+## Tier Routing — Examples
+
+### Tier 1 — Default (Just Do It)
+
+- "Add a new field to an existing model" → Direct implementation
+- "Fix this null pointer bug" → Investigate, fix, verify
+- "Update this endpoint response" → Targeted change following existing patterns
+
+### Tier 2 — Focused Expert (Analyze First, Then Implement)
+
+Task requires domain expertise before writing code. Use MCP tools and project knowledge to gather context before implementing.
+
+**Focused Expert Behavior:**
+
+1. Identify the relevant domain/area
+2. Use MCP tools to gather context
+3. Analyze the impact and constraints
+4. Then implement with full understanding
+
+### Tier 3 — Multiagency (Escalate)
+
+**Escalation Budget**: Max 2 escalations per session. After 2, default to Tier 1 unless genuinely dangerous. Each escalation must include a concrete reason — "this is complex" is not sufficient.
+
+**Escalation format:**
+
+```
+This task would benefit from a multi-agent workflow because [concrete reason].
+Recommended: `/multiagency [workflow] [task description]`
+```
+
+## Session Coordination — Detailed Reference
+
+See `/orchestrator` for full command reference. Quick summary:
+
+| Command                  | Purpose                                            |
+| ------------------------ | -------------------------------------------------- |
+| `/orchestrator sync`     | Register session, check for conflicts, claim locks |
+| `/orchestrator lock`     | Claim advisory ownership of a codebase area        |
+| `/orchestrator unlock`   | Release a lock                                     |
+| `/orchestrator status`   | View current state                                 |
+| `/orchestrator complete` | End session, release locks, record outcome         |
+| `/orchestrator note`     | Add a cross-cutting note for all sessions          |
+
+**Build Failure Decision Tree:**
+
+```
+Build failed → Check area → Active lock?
+  ├─ YES, I own it → Fix it
+  ├─ YES, lock allows external fixes → Fix it
+  ├─ YES, lock denies external fixes → REPORT ONLY (do not fix)
+  └─ NO lock → Safe to fix
+```
+
+## Project-Specific Guidelines
+{{if .HasGo}}
+### Backend (Go)
+{{if .HasEventsrc}}
+- Follow eventsrc patterns for domain changes
+- Use DSL for read models, commands, events{{end}}
+{{- range .Build.GenerateCommands}}
+- Run `{{.}}` after relevant changes{{end}}
+{{- range .Build.Commands}}
+{{- if eq . "go build ./..."}}
+- Check generated files compile: `go build ./...`{{end}}{{end}}
+{{end}}
+{{- if .HasTS}}
+### Frontend (TypeScript)
+{{if .HasNextJS}}
+- Follow Next.js page/component patterns{{end}}
+- Use existing shared components
+- Maintain TypeScript strict typing
+{{- range .Build.Commands}}
+{{- if eq . "npx tsc --noEmit"}}
+- Type check: `npx tsc --noEmit`{{end}}{{end}}
+{{end}}
+{{- if .HasPython}}
+### Python
+
+- Follow existing patterns and type hints
+- Use project linters and formatters
+- Run tests after changes
+{{end}}
+{{- if .HasRust}}
+### Rust
+
+- Follow ownership and borrowing patterns
+- Run `cargo clippy` after changes
+- Maintain type safety
+{{end}}

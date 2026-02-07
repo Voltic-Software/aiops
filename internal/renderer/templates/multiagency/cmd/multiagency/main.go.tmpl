@@ -1,0 +1,212 @@
+package main
+
+import (
+	"encoding/json"
+	"fmt"
+	"os"
+	"path/filepath"
+	"strings"
+
+	"github.com/spf13/cobra"
+	"{{.MultiagencyMod}}/internal/spec"
+)
+
+var (
+	version = "0.2.0"
+)
+
+func main() {
+	if err := rootCmd.Execute(); err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
+	}
+}
+
+var rootCmd = &cobra.Command{
+	Use:   "multiagency",
+	Short: "Multi-agent workflow spec manager for Cascade",
+	Long: `Multiagency is a spec management tool for multi-agent workflows.
+
+This tool validates and prepares workflow specifications that are executed
+by Cascade (the LLM in Windsurf). Cascade reads the spec and executes each
+agent step using its own capabilities and MCP tools.
+
+Commands:
+  validate  - Validate a workflow spec
+  show      - Show agent details and prompts for a workflow
+  list      - List available workflow specs
+  init      - Initialize a new workflow from a state file`,
+	Version: version,
+}
+
+var (
+	specFile  string
+	agentID   string
+	specsDir  string
+	stateFile string
+)
+
+func init() {
+	rootCmd.AddCommand(validateCmd)
+	rootCmd.AddCommand(showCmd)
+	rootCmd.AddCommand(listCmd)
+	rootCmd.AddCommand(initCmd)
+}
+
+var validateCmd = &cobra.Command{
+	Use:   "validate",
+	Short: "Validate a workflow specification",
+	RunE: func(cmd *cobra.Command, args []string) error {
+		workflowSpec, err := spec.LoadFromFile(specFile)
+		if err != nil {
+			return fmt.Errorf("validation failed: %w", err)
+		}
+
+		fmt.Printf("✓ Specification is valid\n")
+		fmt.Printf("  Name: %s\n", workflowSpec.Name)
+		fmt.Printf("  Version: %s\n", workflowSpec.Version)
+		fmt.Printf("  Agents: %d\n", len(workflowSpec.Agents))
+		for i, agent := range workflowSpec.Agents {
+			mcpInfo := ""
+			if len(agent.MCPTools) > 0 {
+				mcpInfo = fmt.Sprintf(" [MCP: %s]", strings.Join(agent.MCPTools, ", "))
+			}
+			fmt.Printf("    %d. %s (%s)%s\n", i+1, agent.ID, agent.Role, mcpInfo)
+		}
+		return nil
+	},
+}
+
+func init() {
+	validateCmd.Flags().StringVarP(&specFile, "spec", "s", "", "Path to workflow spec (required)")
+	validateCmd.MarkFlagRequired("spec")
+}
+
+var showCmd = &cobra.Command{
+	Use:   "show",
+	Short: "Show agent details and generated prompts",
+	RunE: func(cmd *cobra.Command, args []string) error {
+		workflowSpec, err := spec.LoadFromFile(specFile)
+		if err != nil {
+			return err
+		}
+
+		if agentID == "" {
+			fmt.Printf("# %s\n\n", workflowSpec.Name)
+			if workflowSpec.Description != "" {
+				fmt.Printf("%s\n\n", workflowSpec.Description)
+			}
+			for i, agent := range workflowSpec.Agents {
+				fmt.Printf("## Agent %d: %s\n", i+1, agent.ID)
+				fmt.Printf("**Role:** %s\n", agent.Role)
+				fmt.Printf("**Goal:** %s\n", agent.Goal)
+				if len(agent.InputFrom) > 0 {
+					fmt.Printf("**Inputs from:** %s\n", strings.Join(agent.InputFrom, ", "))
+				}
+				if len(agent.MCPTools) > 0 {
+					fmt.Printf("**MCP Tools:** %s\n", strings.Join(agent.MCPTools, ", "))
+				}
+				fmt.Printf("**Constraints:**\n")
+				for _, c := range agent.Constraints {
+					fmt.Printf("  - %s\n", c)
+				}
+				fmt.Println()
+			}
+		} else {
+			agent := workflowSpec.GetAgentByID(agentID)
+			if agent == nil {
+				return fmt.Errorf("agent '%s' not found", agentID)
+			}
+			fmt.Printf("# Agent: %s\n\n", agent.ID)
+			fmt.Printf("## System Prompt Template\n\n")
+			fmt.Printf("```\n")
+			fmt.Printf("You are %s.\n\n", agent.Role)
+			fmt.Printf("Your goal is to: %s\n\n", agent.Goal)
+			fmt.Printf("Constraints:\n")
+			for _, c := range agent.Constraints {
+				fmt.Printf("- %s\n", c)
+			}
+			fmt.Printf("```\n\n")
+			fmt.Printf("## Output Schema\n\n")
+			schemaJSON, _ := json.MarshalIndent(agent.OutputSchema, "", "  ")
+			fmt.Printf("```json\n%s\n```\n", string(schemaJSON))
+		}
+		return nil
+	},
+}
+
+func init() {
+	showCmd.Flags().StringVarP(&specFile, "spec", "s", "", "Path to workflow spec (required)")
+	showCmd.Flags().StringVarP(&agentID, "agent", "a", "", "Specific agent ID to show details for")
+	showCmd.MarkFlagRequired("spec")
+}
+
+var listCmd = &cobra.Command{
+	Use:   "list",
+	Short: "List available workflow specs",
+	RunE: func(cmd *cobra.Command, args []string) error {
+		dir := specsDir
+		if dir == "" {
+			exe, _ := os.Executable()
+			dir = filepath.Join(filepath.Dir(exe), "specs")
+		}
+
+		entries, err := os.ReadDir(dir)
+		if err != nil {
+			return fmt.Errorf("failed to read specs directory: %w", err)
+		}
+
+		fmt.Printf("Available workflows in %s:\n\n", dir)
+		for _, entry := range entries {
+			if !entry.IsDir() && (strings.HasSuffix(entry.Name(), ".yaml") || strings.HasSuffix(entry.Name(), ".yml")) {
+				specPath := filepath.Join(dir, entry.Name())
+				workflowSpec, err := spec.LoadFromFile(specPath)
+				if err != nil {
+					fmt.Printf("  ✗ %s (invalid: %v)\n", entry.Name(), err)
+					continue
+				}
+				fmt.Printf("  ✓ %s\n", entry.Name())
+				fmt.Printf("    Name: %s\n", workflowSpec.Name)
+				fmt.Printf("    Agents: %d\n", len(workflowSpec.Agents))
+			}
+		}
+		return nil
+	},
+}
+
+func init() {
+	listCmd.Flags().StringVarP(&specsDir, "dir", "d", "", "Directory containing workflow specs")
+}
+
+var initCmd = &cobra.Command{
+	Use:   "init",
+	Short: "Initialize or resume a workflow from state",
+	RunE: func(cmd *cobra.Command, args []string) error {
+		workflowSpec, err := spec.LoadFromFile(specFile)
+		if err != nil {
+			return err
+		}
+
+		state := map[string]interface{}{
+			"workflow":      workflowSpec.Name,
+			"spec_file":     specFile,
+			"current_agent": 0,
+			"agents":        []string{},
+			"outputs":       map[string]interface{}{},
+			"status":        "initialized",
+		}
+
+		for _, agent := range workflowSpec.Agents {
+			state["agents"] = append(state["agents"].([]string), agent.ID)
+		}
+
+		jsonBytes, _ := json.MarshalIndent(state, "", "  ")
+		fmt.Println(string(jsonBytes))
+		return nil
+	},
+}
+
+func init() {
+	initCmd.Flags().StringVarP(&specFile, "spec", "s", "", "Path to workflow spec (required)")
+	initCmd.MarkFlagRequired("spec")
+}

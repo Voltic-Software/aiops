@@ -1,0 +1,6 @@
+# Binary
+aiops
+*.exe
+
+# OS
+.DS_Store

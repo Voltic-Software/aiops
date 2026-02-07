@@ -1,0 +1,56 @@
+package spec
+
+import (
+	"fmt"
+	"os"
+
+	"gopkg.in/yaml.v3"
+)
+
+// LoadFromFile loads a workflow spec from a YAML file
+func LoadFromFile(path string) (*WorkflowSpec, error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read spec file: %w", err)
+	}
+
+	return LoadFromBytes(data)
+}
+
+// LoadFromBytes loads a workflow spec from YAML bytes
+func LoadFromBytes(data []byte) (*WorkflowSpec, error) {
+	var spec WorkflowSpec
+	if err := yaml.Unmarshal(data, &spec); err != nil {
+		return nil, fmt.Errorf("failed to parse spec YAML: %w", err)
+	}
+
+	if spec.LLM.MaxTokens == 0 {
+		spec.LLM.MaxTokens = 4096
+	}
+
+	if err := spec.Validate(); err != nil {
+		return nil, fmt.Errorf("invalid spec: %w", err)
+	}
+
+	return &spec, nil
+}
+
+// GetAgentByID returns an agent by its ID
+func (w *WorkflowSpec) GetAgentByID(id string) *Agent {
+	for i := range w.Agents {
+		if w.Agents[i].ID == id {
+			return &w.Agents[i]
+		}
+	}
+	return nil
+}
+
+// GetAgentIndex returns the index of an agent by its ID
+func (w *WorkflowSpec) GetAgentIndex(id string) int {
+	for i := range w.Agents {
+		if w.Agents[i].ID == id {
+			return i
+		}
+	}
+	return -1
+}
