@@ -1,12 +1,14 @@
 # aiops
 
-AI-powered operations infrastructure for your codebase. Installs senior-engineer behavior as code — rules, workflows, coordination, and evolution — for Windsurf/Cascade AI sessions.
+AI-powered operations infrastructure for your codebase. Installs senior-engineer behavior as code — rules, workflows, coordination, and evolution — for any AI-powered IDE.
+
+**Supported targets:** Windsurf (Cascade), Cursor, Continue (VS Code), GitHub Copilot. Auto-detected — generates for all IDEs found on your system.
 
 ## What It Does
 
 `aiops` scans your repository, detects your tech stack, and generates a complete set of AI session management artifacts:
 
-- **Global rules** — behavioral constitution loaded into every Cascade session
+- **Global rules** — behavioral constitution loaded into every AI session
 - **Orchestrator** — cross-session coordination with advisory locks and build failure protocol
 - **Workflows** — default execution mode, evolution audits, multiagency specs
 - **Multiagency module** — complete Go module with CLI, spec parser, LLM clients, agent executor, and pipeline orchestrator
@@ -52,30 +54,29 @@ Project name [myproject]: myproject
 
 ✓ Created .aiops.yaml
 
-Generating Cascade artifacts...
-  ✓ global_rules.md
+IDE targets: Windsurf (Cascade), Cursor, GitHub Copilot
+
+Generating artifacts...
+  ✓ global_rules.md (Windsurf)
   ✓ .windsurf/workflows/default-mode.md
   ✓ .windsurf/workflows/orchestrator.md
   ✓ .windsurf/workflows/multiagency.md
   ✓ .windsurf/orchestrator/session_state.yaml
+  ✓ .cursor/rules/aiops.mdc
+  ✓ .cursor/prompts/default-mode.md
+  ✓ .cursor/prompts/orchestrator.md
+  ✓ .cursor/prompts/multiagency.md
+  ✓ .cursor/orchestrator/session_state.yaml
+  ✓ .github/copilot-instructions.md
   ✓ multiagency/go.mod
-  ✓ multiagency/README.md
   ✓ multiagency/cmd/multiagency/main.go
-  ✓ multiagency/internal/spec/types.go
-  ✓ multiagency/internal/spec/loader.go
-  ✓ multiagency/internal/llm/client.go
-  ✓ multiagency/internal/llm/stub.go
-  ✓ multiagency/internal/llm/anthropic.go
-  ✓ multiagency/internal/agent/executor.go
-  ✓ multiagency/internal/agent/prompt.go
-  ✓ multiagency/internal/pipeline/context.go
-  ✓ multiagency/internal/pipeline/executor.go
+  ✓ multiagency/internal/...
   ✓ multiagency/specs/design.yaml
   ✓ multiagency/specs/code_review.yaml
   ✓ multiagency/specs/manager.yaml
   ✓ multiagency/specs/evolution_audit.yaml
 
-✅ aiops initialized! 21 files generated.
+✅ aiops initialized! 27 files generated.
 ```
 
 ### `aiops scan`
@@ -157,7 +158,7 @@ Proposed: Relax intent guardrail for dependent-file changes.
 
 ### `aiops skills`
 
-Auto-generates skill scaffolds based on detected frameworks. Skills are directories in `.windsurf/skills/` that Cascade auto-invokes based on task type.
+Auto-generates skill scaffolds based on detected frameworks. Skills are placed in each target's skills directory and auto-invoked based on task type.
 
 ```
 $ aiops skills
@@ -180,18 +181,26 @@ Generate these skill scaffolds? [Y/n] y
 ✅ Generated 4 skill scaffolds.
 ```
 
+## Supported IDE Targets
+
+| Target       | Rules                                          | Workflows              | Orchestrator              | Auto-detected by                      |
+| ------------ | ---------------------------------------------- | ---------------------- | ------------------------- | ------------------------------------- |
+| **Windsurf** | `~/.codeium/windsurf/memories/global_rules.md` | `.windsurf/workflows/` | `.windsurf/orchestrator/` | `~/.codeium/windsurf/` exists         |
+| **Cursor**   | `.cursor/rules/aiops.mdc`                      | `.cursor/prompts/`     | `.cursor/orchestrator/`   | `.cursor/` or `~/.cursor/` exists     |
+| **Continue** | `.continue/rules/aiops.md`                     | `.continue/prompts/`   | `.continue/orchestrator/` | `.continue/` or `~/.continue/` exists |
+| **Copilot**  | `.github/copilot-instructions.md`              | —                      | —                         | `.github/` or `~/.vscode/` exists     |
+
+All targets get the same rules content, adapted to the correct file paths. Templates reference `{{.OrchestrDir}}` so each target's rules point to its own orchestrator location.
+
 ## What Gets Generated
 
-### `aiops init` — Cascade artifacts
+### `aiops init` — Per-target artifacts (repeated for each detected IDE)
 
-| File                                        | Purpose                                  |
-| ------------------------------------------- | ---------------------------------------- |
-| `.aiops.yaml`                               | Project config (detected stack, paths)   |
-| `global_rules.md` (Windsurf memories)       | Compact behavioral rules — always active |
-| `.windsurf/workflows/default-mode.md`       | Detailed reference manual for Cascade    |
-| `.windsurf/workflows/orchestrator.md`       | Session coordination commands            |
-| `.windsurf/workflows/multiagency.md`        | Multi-agent workflow executor            |
-| `.windsurf/orchestrator/session_state.yaml` | Shared state for parallel sessions       |
+| File                               | Purpose                                         |
+| ---------------------------------- | ----------------------------------------------- |
+| Rules file (path varies by target) | Compact behavioral rules — always active        |
+| Workflows directory (path varies)  | Default mode, orchestrator, multiagency prompts |
+| Orchestrator state (path varies)   | Shared state for parallel sessions              |
 
 ### `aiops init` — Multiagency Go module
 
@@ -233,27 +242,27 @@ aiops/
 ├── internal/
 │   ├── config/config.go            # .aiops.yaml schema and I/O
 │   ├── scanner/scanner.go          # Repo analysis + Go module detection
+│   ├── target/target.go            # IDE target definitions + auto-detection
 │   ├── renderer/
-│   │   ├── renderer.go             # Template rendering engine (embed.FS)
+│   │   ├── renderer.go             # Multi-target template rendering engine
 │   │   └── templates/              # Embedded Go templates
-│   │       ├── memories/           # → Windsurf memories directory
-│   │       ├── windsurf/           # → .windsurf/ directory
-│   │       └── multiagency/        # → Complete Go module
-│   │           ├── go.mod.tmpl
-│   │           ├── README.md.tmpl
-│   │           ├── cmd/multiagency/main.go.tmpl
-│   │           ├── internal/spec/  # types.go.tmpl, loader.go.tmpl
-│   │           ├── internal/llm/   # client.go.tmpl, stub.go.tmpl, anthropic.go.tmpl
-│   │           ├── internal/agent/ # executor.go.tmpl, prompt.go.tmpl
-│   │           ├── internal/pipeline/ # context.go.tmpl, executor.go.tmpl
-│   │           └── specs/          # design.yaml, code_review.yaml, ...
+│   │       ├── memories/           # → Rules (rendered per target)
+│   │       ├── windsurf/           # → Workflows + orchestrator (rendered per target)
+│   │       └── multiagency/        # → Complete Go module (rendered once)
 │   ├── updater/updater.go          # Diff and apply template updates
 │   ├── evolve/evolve.go            # Directive log analysis and rule proposals
 │   └── skills/skills.go            # Framework-specific skill scaffold generation
 └── README.md
 ```
 
-Go source templates use `.go.tmpl` extension to prevent the compiler from treating them as source code. Import paths are templatized with `{{.MultiagencyMod}}`, derived from the detected Go module path.
+**Key design decisions:**
+
+- **Target abstraction** — each IDE is a `Target` with path mappings for rules, workflows, orchestrator, and skills
+- **Auto-detection** — scans for IDE config directories (`~/.codeium/windsurf/`, `.cursor/`, etc.)
+- **Render per target** — rules and workflows are rendered once per detected target with `{{.OrchestrDir}}` adapted
+- **Shared artifacts** — multiagency module is rendered once (IDE-independent)
+- **`.go.tmpl` extension** — prevents compiler from treating template Go files as source code
+- **`{{.MultiagencyMod}}`** — import paths derived from detected Go module path
 
 ## Design Principles
 
@@ -288,4 +297,5 @@ Auto-detected based on language and framework. Includes build, test, and code ge
 - Plugin system for custom detectors
 - `aiops update` across repos (pull from a shared template repo)
 - Version pinning for templates
-- Extract to standalone repo for distribution
+- Target-specific template overrides (e.g., Cursor-specific prompt format)
+- `go install github.com/voltic-software/aiops/cmd/aiops@latest` distribution

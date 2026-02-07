@@ -11,6 +11,7 @@ import (
 	"text/template"
 
 	"github.com/voltic-software/aiops/internal/config"
+	"github.com/voltic-software/aiops/internal/target"
 )
 
 //go:embed all:templates
@@ -23,6 +24,9 @@ type TemplateData struct {
 	Build          config.BuildInfo
 	GoModule       string // Root Go module path (e.g., "github.com/org/project")
 	MultiagencyMod string // Multiagency module path (e.g., "github.com/org/project/multiagency")
+	TargetName     string // Current target being rendered (e.g., "windsurf", "cursor")
+	TargetDisplay  string // Human-readable target name
+	OrchestrDir    string // Orchestrator dir for this target (e.g., ".windsurf/orchestrator")
 	HasGo          bool
 	HasTS          bool
 	HasPython      bool
@@ -100,12 +104,113 @@ func GetTemplateFS() embed.FS {
 	return templateFS
 }
 
-// RenderAll renders all templates to the project directory.
+// RenderAll renders all templates to the project directory for all detected targets.
 func RenderAll(projectDir string, cfg *config.ProjectConfig) ([]string, error) {
+	targets := resolveTargets(cfg)
+	var allRendered []string
+
+	// Render target-specific artifacts (rules, workflows, orchestrator) for each target
+	for _, t := range targets {
+		files, err := renderForTarget(projectDir, cfg, t)
+		if err != nil {
+			return nil, fmt.Errorf("rendering for %s: %w", t.DisplayName, err)
+		}
+		allRendered = append(allRendered, files...)
+	}
+
+	// Render target-independent artifacts (multiagency) once
+	files, err := renderShared(projectDir, cfg)
+	if err != nil {
+		return nil, fmt.Errorf("rendering shared artifacts: %w", err)
+	}
+	allRendered = append(allRendered, files...)
+
+	return allRendered, nil
+}
+
+// resolveTargets returns the targets to render for.
+func resolveTargets(cfg *config.ProjectConfig) []target.Target {
+	if len(cfg.Paths.Targets) > 0 {
+		var targets []target.Target
+		for _, name := range cfg.Paths.Targets {
+			for _, t := range target.All {
+				if t.Name == name {
+					targets = append(targets, t)
+				}
+			}
+		}
+		if len(targets) > 0 {
+			return targets
+		}
+	}
+	// Fallback: windsurf only (backward compat)
+	return []target.Target{target.Windsurf}
+}
+
+// renderForTarget renders rules, workflows, and orchestrator for a single target.
+func renderForTarget(projectDir string, cfg *config.ProjectConfig, t target.Target) ([]string, error) {
 	data := NewTemplateData(cfg)
+	data.TargetName = t.Name
+	data.TargetDisplay = t.DisplayName
+	data.OrchestrDir = t.OrchestrDir
+
 	var rendered []string
 
-	err := fs.WalkDir(templateFS, "templates", func(path string, d fs.DirEntry, err error) error {
+	// 1. Render rules
+	rulesOut := t.ResolveRulesPath(projectDir)
+	if rulesOut != "" {
+		output, err := renderTemplate("templates/memories/global_rules.md.tmpl", data)
+		if err != nil {
+			return nil, fmt.Errorf("rendering rules for %s: %w", t.Name, err)
+		}
+		if err := writeFile(rulesOut, output); err != nil {
+			return nil, err
+		}
+		rel, _ := filepath.Rel(projectDir, rulesOut)
+		rendered = append(rendered, rel)
+	}
+
+	// 2. Render workflows
+	workflowsDir := t.ResolveWorkflowsDir(projectDir)
+	if workflowsDir != "" {
+		wfFiles, err := renderDir("templates/windsurf/workflows", workflowsDir, data)
+		if err != nil {
+			return nil, err
+		}
+		for _, f := range wfFiles {
+			rel, _ := filepath.Rel(projectDir, f)
+			rendered = append(rendered, rel)
+		}
+	}
+
+	// 3. Render orchestrator
+	orchestrDir := t.ResolveOrchestrDir(projectDir)
+	if orchestrDir != "" {
+		orcFiles, err := renderDir("templates/windsurf/orchestrator", orchestrDir, data)
+		if err != nil {
+			return nil, err
+		}
+		for _, f := range orcFiles {
+			rel, _ := filepath.Rel(projectDir, f)
+			rendered = append(rendered, rel)
+		}
+	}
+
+	return rendered, nil
+}
+
+// renderShared renders target-independent artifacts (multiagency).
+func renderShared(projectDir string, cfg *config.ProjectConfig) ([]string, error) {
+	data := NewTemplateData(cfg)
+	data.TargetName = "shared"
+	var rendered []string
+
+	multiagencyDir := cfg.Paths.Multiagency
+	if multiagencyDir == "" {
+		multiagencyDir = "multiagency"
+	}
+
+	err := fs.WalkDir(templateFS, "templates/multiagency", func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
 			return err
 		}
@@ -113,44 +218,17 @@ func RenderAll(projectDir string, cfg *config.ProjectConfig) ([]string, error) {
 			return nil
 		}
 
-		// Compute output path
-		relPath := strings.TrimPrefix(path, "templates/")
-		outPath := resolveOutputPath(projectDir, cfg, relPath)
+		relPath := strings.TrimPrefix(path, "templates/multiagency/")
+		outPath := filepath.Join(projectDir, multiagencyDir, relPath)
+		outPath = strings.TrimSuffix(outPath, ".tmpl")
 
-		// Strip .tmpl extension for template files
-		if strings.HasSuffix(outPath, ".tmpl") {
-			outPath = strings.TrimSuffix(outPath, ".tmpl")
-		}
-
-		// Read template content
-		content, err := templateFS.ReadFile(path)
+		output, err := renderFileContent(path, data)
 		if err != nil {
-			return fmt.Errorf("reading template %s: %w", path, err)
+			return err
 		}
 
-		var output []byte
-		if strings.HasSuffix(path, ".tmpl") {
-			// Render as Go template
-			tmpl, err := template.New(filepath.Base(path)).Funcs(templateFuncs()).Parse(string(content))
-			if err != nil {
-				return fmt.Errorf("parsing template %s: %w", path, err)
-			}
-			var buf bytes.Buffer
-			if err := tmpl.Execute(&buf, data); err != nil {
-				return fmt.Errorf("rendering template %s: %w", path, err)
-			}
-			output = buf.Bytes()
-		} else {
-			// Copy as-is
-			output = content
-		}
-
-		// Write output
-		if err := os.MkdirAll(filepath.Dir(outPath), 0755); err != nil {
-			return fmt.Errorf("creating directory for %s: %w", outPath, err)
-		}
-		if err := os.WriteFile(outPath, output, 0644); err != nil {
-			return fmt.Errorf("writing %s: %w", outPath, err)
+		if err := writeFile(outPath, output); err != nil {
+			return err
 		}
 
 		rel, _ := filepath.Rel(projectDir, outPath)
@@ -161,34 +239,89 @@ func RenderAll(projectDir string, cfg *config.ProjectConfig) ([]string, error) {
 	return rendered, err
 }
 
-// resolveOutputPath maps template paths to actual output paths.
-func resolveOutputPath(projectDir string, cfg *config.ProjectConfig, relPath string) string {
-	windsurfDir := cfg.Paths.Windsurf
-	if windsurfDir == "" {
-		windsurfDir = ".windsurf"
+// renderTemplate renders a single template file and returns the output bytes.
+func renderTemplate(templatePath string, data *TemplateData) ([]byte, error) {
+	content, err := templateFS.ReadFile(templatePath)
+	if err != nil {
+		return nil, fmt.Errorf("reading template %s: %w", templatePath, err)
 	}
 
-	multiagencyDir := cfg.Paths.Multiagency
-	if multiagencyDir == "" {
-		multiagencyDir = "multiagency"
+	tmpl, err := template.New(filepath.Base(templatePath)).Funcs(templateFuncs()).Parse(string(content))
+	if err != nil {
+		return nil, fmt.Errorf("parsing template %s: %w", templatePath, err)
 	}
 
-	if strings.HasPrefix(relPath, "windsurf/") {
-		return filepath.Join(projectDir, windsurfDir, strings.TrimPrefix(relPath, "windsurf/"))
+	var buf bytes.Buffer
+	if err := tmpl.Execute(&buf, data); err != nil {
+		return nil, fmt.Errorf("rendering template %s: %w", templatePath, err)
 	}
-	if strings.HasPrefix(relPath, "multiagency/") {
-		return filepath.Join(projectDir, multiagencyDir, strings.TrimPrefix(relPath, "multiagency/"))
-	}
-	if strings.HasPrefix(relPath, "memories/") {
-		memDir := cfg.Paths.Memories
-		if memDir == "" {
-			home, _ := os.UserHomeDir()
-			memDir = filepath.Join(home, ".codeium", "windsurf", "memories")
+
+	return buf.Bytes(), nil
+}
+
+// renderDir renders all files in a template directory to an output directory.
+func renderDir(templateDir, outputDir string, data *TemplateData) ([]string, error) {
+	var rendered []string
+
+	err := fs.WalkDir(templateFS, templateDir, func(path string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return err
 		}
-		return filepath.Join(memDir, strings.TrimPrefix(relPath, "memories/"))
+		if d.IsDir() {
+			return nil
+		}
+
+		relPath := strings.TrimPrefix(path, templateDir+"/")
+		outPath := filepath.Join(outputDir, relPath)
+		outPath = strings.TrimSuffix(outPath, ".tmpl")
+
+		output, err := renderFileContent(path, data)
+		if err != nil {
+			return err
+		}
+
+		if err := writeFile(outPath, output); err != nil {
+			return err
+		}
+
+		rendered = append(rendered, outPath)
+		return nil
+	})
+
+	return rendered, err
+}
+
+// renderFileContent reads and optionally templates a file.
+func renderFileContent(path string, data *TemplateData) ([]byte, error) {
+	content, err := templateFS.ReadFile(path)
+	if err != nil {
+		return nil, fmt.Errorf("reading %s: %w", path, err)
 	}
 
-	return filepath.Join(projectDir, relPath)
+	if strings.HasSuffix(path, ".tmpl") {
+		tmpl, err := template.New(filepath.Base(path)).Funcs(templateFuncs()).Parse(string(content))
+		if err != nil {
+			return nil, fmt.Errorf("parsing template %s: %w", path, err)
+		}
+		var buf bytes.Buffer
+		if err := tmpl.Execute(&buf, data); err != nil {
+			return nil, fmt.Errorf("rendering template %s: %w", path, err)
+		}
+		return buf.Bytes(), nil
+	}
+
+	return content, nil
+}
+
+// writeFile creates parent directories and writes content.
+func writeFile(path string, content []byte) error {
+	if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
+		return fmt.Errorf("creating directory for %s: %w", path, err)
+	}
+	if err := os.WriteFile(path, content, 0644); err != nil {
+		return fmt.Errorf("writing %s: %w", path, err)
+	}
+	return nil
 }
 
 func templateFuncs() template.FuncMap {

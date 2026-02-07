@@ -109,30 +109,12 @@ func Apply(projectDir string, cfg *config.ProjectConfig, plan *Plan, includeUnch
 	return applied, nil
 }
 
-// resolveRealPath maps a temp-rendered relative path back to the real project path.
+// resolveRealPath maps a rendered relative path back to the real project path.
 func resolveRealPath(projectDir string, cfg *config.ProjectConfig, relPath string) string {
-	windsurfDir := cfg.Paths.Windsurf
-	if windsurfDir == "" {
-		windsurfDir = ".windsurf"
-	}
-	multiagencyDir := cfg.Paths.Multiagency
-	if multiagencyDir == "" {
-		multiagencyDir = "multiagency"
-	}
-
-	if strings.HasPrefix(relPath, ".windsurf/") || strings.HasPrefix(relPath, "windsurf/") {
-		return filepath.Join(projectDir, windsurfDir, strings.TrimPrefix(strings.TrimPrefix(relPath, ".windsurf/"), "windsurf/"))
-	}
-	if strings.HasPrefix(relPath, "multiagency/") {
-		return filepath.Join(projectDir, multiagencyDir, strings.TrimPrefix(relPath, "multiagency/"))
-	}
-	if strings.HasPrefix(relPath, "memories/") {
-		memDir := cfg.Paths.Memories
-		if memDir == "" {
-			home, _ := os.UserHomeDir()
-			memDir = filepath.Join(home, ".codeium", "windsurf", "memories")
-		}
-		return filepath.Join(memDir, strings.TrimPrefix(relPath, "memories/"))
+	// The renderer now returns paths relative to projectDir (or absolute for
+	// home-based rules). If it starts with ../ or /, it's already resolved.
+	if filepath.IsAbs(relPath) {
+		return relPath
 	}
 	return filepath.Join(projectDir, relPath)
 }

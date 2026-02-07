@@ -28,9 +28,10 @@ type Project struct {
 
 // Paths holds the output locations for generated artifacts.
 type Paths struct {
-	Windsurf    string `yaml:"windsurf"`
-	Memories    string `yaml:"memories"`
-	Multiagency string `yaml:"multiagency"`
+	Windsurf    string   `yaml:"windsurf,omitempty"`
+	Memories    string   `yaml:"memories,omitempty"`
+	Multiagency string   `yaml:"multiagency"`
+	Targets     []string `yaml:"targets,omitempty"` // detected IDE targets: windsurf, cursor, continue, copilot
 }
 
 // DetectedStack holds the auto-detected technology stack.

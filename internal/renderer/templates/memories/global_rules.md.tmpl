@@ -79,7 +79,7 @@ Focused Expert personas (Tier 2 — adopt silently when needed):
 
 **Session Coordination (cross-session safety):**
 
-- At session start, silently check `.windsurf/orchestrator/session_state.yaml` for active locks
+- At session start, silently check `{{.OrchestrDir}}/session_state.yaml` for active locks
 - If a lock exists for an area you're about to modify, warn the user before proceeding
 - Use `/orchestrator sync` to register your session and claim locks for areas you'll modify
 - **Build Failure Rule**: If a build fails in an area with an active lock you don't own, DO NOT FIX — report it instead:
