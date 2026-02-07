@@ -86,4 +86,18 @@ Focused Expert personas (Tier 2 — adopt silently when needed):
   `"Build failed in [area]. Locked by [session]: [reason]. Expected instability: [yes/no]. I will not attempt a fix."`
 - **Ownership principle**: Agents may observe anything, but may only modify what they explicitly own
 
+{{- if .MCPServers}}
+
+**Available MCP Servers:**
+
+The following MCP servers are configured and available in this project. Use them proactively when they are relevant to the task.
+{{range .MCPServers}}
+- **{{.Name}}**{{if .Command}} ({{.Command}}){{end}}{{end}}
+
+When an MCP server is available for the task domain, prefer using its tools over manual exploration. For example:
+- Use project-specific MCP tools to query schemas, APIs, or domain models before making changes
+- Use MCP search/read tools to understand codebase structure before editing
+- If an MCP tool fails, fall back to standard file/grep tools — do not block on MCP errors
+{{- end}}
+
 **Reference:** For detailed examples, procedures, and tables, see `/default-mode`. For orchestrator commands, see `/orchestrator`.

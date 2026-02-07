@@ -38,6 +38,7 @@ type TemplateData struct {
 	HasDDD         bool
 	HasMonorepo    bool
 	HasMCP         bool
+	MCPServers     []config.MCPServer
 }
 
 // NewTemplateData builds template data from a project config.
@@ -94,6 +95,11 @@ func NewTemplateData(cfg *config.ProjectConfig) *TemplateData {
 		case "mcp-server":
 			td.HasMCP = true
 		}
+	}
+
+	td.MCPServers = cfg.Detected.MCPServers
+	if len(td.MCPServers) > 0 {
+		td.HasMCP = true
 	}
 
 	return td

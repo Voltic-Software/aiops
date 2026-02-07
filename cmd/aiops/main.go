@@ -36,6 +36,8 @@ func main() {
 		cmdEvolve()
 	case "skills":
 		cmdSkills()
+	case "sync":
+		cmdSync()
 	case "version":
 		fmt.Printf("aiops %s\n", config.Version)
 	case "help", "--help", "-h":
@@ -53,6 +55,7 @@ func printUsage() {
 Usage:
   aiops init      Scan repo, generate config, install Cascade artifacts
   aiops scan      Re-scan repo and show detected stack (does not write files)
+  aiops sync      Re-scan MCPs and targets, re-render rules (no questions)
   aiops status    Show what's installed and check for staleness
   aiops update    Regenerate artifacts from latest templates, show diff
   aiops evolve    Read directive logs and propose rule changes
@@ -411,6 +414,119 @@ func cmdSkills() {
 	fmt.Println("  3. Skills are auto-invoked by Cascade based on task description")
 }
 
+// --- sync command ---
+
+func cmdSync() {
+	dir := getDir()
+
+	cfg, err := config.Load(dir)
+	if err != nil {
+		fmt.Println("✗ Not initialized. Run `aiops init` first.")
+		os.Exit(1)
+	}
+
+	fmt.Printf("aiops sync — %s\n\n", cfg.Project.Name)
+
+	// Re-scan MCPs
+	stack, err := scanner.Scan(dir)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error scanning: %v\n", err)
+		os.Exit(1)
+	}
+
+	// Re-detect targets
+	targets := target.Detect(dir)
+	var targetNames []string
+	for _, t := range targets {
+		targetNames = append(targetNames, t.Name)
+	}
+
+	// Compare MCPs
+	oldMCPs := map[string]bool{}
+	for _, m := range cfg.Detected.MCPServers {
+		oldMCPs[m.Name] = true
+	}
+	newMCPs := map[string]bool{}
+	for _, m := range stack.MCPServers {
+		newMCPs[m.Name] = true
+	}
+
+	var added, removed []string
+	for _, m := range stack.MCPServers {
+		if !oldMCPs[m.Name] {
+			added = append(added, m.Name+" ("+m.Source+")")
+		}
+	}
+	for _, m := range cfg.Detected.MCPServers {
+		if !newMCPs[m.Name] {
+			removed = append(removed, m.Name+" ("+m.Source+")")
+		}
+	}
+
+	// Compare targets
+	oldTargets := map[string]bool{}
+	for _, t := range cfg.Paths.Targets {
+		oldTargets[t] = true
+	}
+	var addedTargets, removedTargets []string
+	for _, t := range targetNames {
+		if !oldTargets[t] {
+			addedTargets = append(addedTargets, t)
+		}
+	}
+	newTargets := map[string]bool{}
+	for _, t := range targetNames {
+		newTargets[t] = true
+	}
+	for _, t := range cfg.Paths.Targets {
+		if !newTargets[t] {
+			removedTargets = append(removedTargets, t)
+		}
+	}
+
+	hasChanges := len(added) > 0 || len(removed) > 0 || len(addedTargets) > 0 || len(removedTargets) > 0
+
+	if !hasChanges {
+		fmt.Println("✓ No changes detected. MCPs and targets are up to date.")
+		fmt.Printf("  MCP servers: %d\n", len(cfg.Detected.MCPServers))
+		fmt.Printf("  Targets: %s\n", strings.Join(cfg.Paths.Targets, ", "))
+		return
+	}
+
+	// Report changes
+	for _, name := range added {
+		fmt.Printf("  + MCP added: %s\n", name)
+	}
+	for _, name := range removed {
+		fmt.Printf("  - MCP removed: %s\n", name)
+	}
+	for _, name := range addedTargets {
+		fmt.Printf("  + Target added: %s\n", name)
+	}
+	for _, name := range removedTargets {
+		fmt.Printf("  - Target removed: %s\n", name)
+	}
+
+	// Update config
+	cfg.Detected.MCPServers = stack.MCPServers
+	cfg.Paths.Targets = targetNames
+
+	if err := config.Save(dir, cfg); err != nil {
+		fmt.Fprintf(os.Stderr, "Error saving config: %v\n", err)
+		os.Exit(1)
+	}
+
+	// Re-render all artifacts
+	fmt.Println("\nRe-rendering artifacts...")
+	files, err := renderer.RenderAll(dir, cfg)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error rendering: %v\n", err)
+		os.Exit(1)
+	}
+
+	fmt.Printf("\n✅ Synced. %d files updated.\n", len(files))
+}
+
 // --- helpers ---
 
 func printDetected(stack *config.DetectedStack) {
@@ -454,6 +570,18 @@ func printDetected(stack *config.DetectedStack) {
 		fmt.Print("  Patterns: ")
 		fmt.Println(strings.Join(stack.Patterns, ", "))
 	}
+
+	if len(stack.MCPServers) > 0 {
+		fmt.Print("  MCP servers: ")
+		names := make([]string, len(stack.MCPServers))
+		for i, s := range stack.MCPServers {
+			names[i] = s.Name
+			if s.Source != "" {
+				names[i] += " (" + s.Source + ")"
+			}
+		}
+		fmt.Println(strings.Join(names, ", "))
+	}
 }
 
 func compareStack(old, new *config.DetectedStack) []string {
@@ -486,6 +614,16 @@ func compareStack(old, new *config.DetectedStack) []string {
 	for _, p := range new.Patterns {
 		if !oldPatterns[p] {
 			diffs = append(diffs, fmt.Sprintf("New pattern detected: %s", p))
+		}
+	}
+
+	oldMCPs := map[string]bool{}
+	for _, m := range old.MCPServers {
+		oldMCPs[m.Name] = true
+	}
+	for _, m := range new.MCPServers {
+		if !oldMCPs[m.Name] {
+			diffs = append(diffs, fmt.Sprintf("New MCP server detected: %s (%s)", m.Name, m.Source))
 		}
 	}
 

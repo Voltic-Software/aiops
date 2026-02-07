@@ -47,12 +47,11 @@ Detected:
   Frameworks: temporal, gin, mqtt, nextjs, tailwindcss
   Build: go build ./..., npx tsc --noEmit, npm run build
   Patterns: domain-driven-design, event-sourcing, code-generation, containerized
+  MCP servers: vera (windsurf), github (cursor), postgres (cursor)
 
 Is this correct? [Y/n] y
 
 Project name [myproject]: myproject
-
-✓ Created .aiops.yaml
 
 IDE targets: Windsurf (Cascade), Cursor, GitHub Copilot
 
@@ -93,9 +92,28 @@ Detected:
   Patterns: domain-driven-design, event-sourcing, containerized
 ```
 
+### `aiops sync`
+
+Re-scans MCP servers and IDE targets, updates config and re-renders rules. No questions asked — designed to be fast and scriptable.
+
+```
+$ aiops sync
+
+aiops sync — myproject
+
+  + MCP added: postgres (cursor)
+  + MCP added: slack (cursor)
+
+Re-rendering artifacts...
+
+✅ Synced. 27 files updated.
+```
+
+Run this after adding or removing an MCP server in any IDE. Can also be hooked into IDE startup or a git hook.
+
 ### `aiops status`
 
-Shows what's installed and detects drift (new frameworks, languages, patterns added since last init).
+Shows what's installed and detects drift (new frameworks, languages, patterns, MCP servers added since last init).
 
 ```
 $ aiops status
@@ -287,6 +305,22 @@ Python: Django, FastAPI, Flask
 ### Patterns
 
 Domain-driven design, event-sourcing, code-generation, monorepo, containerized, GitHub Actions, GitLab CI, MCP server
+
+### MCP Servers
+
+Auto-detected from all known config locations:
+
+| Location                              | Source label |
+| ------------------------------------- | ------------ |
+| `~/.codeium/windsurf/mcp_config.json` | windsurf     |
+| `~/.cursor/mcp.json`                  | cursor       |
+| `~/.continue/config.json`             | continue     |
+| `.cursor/mcp.json` (project)          | cursor       |
+| `.vscode/mcp.json` (project)          | vscode       |
+| `.windsurf/mcp_config.json` (project) | windsurf     |
+| `mcp.json` (project root)             | project      |
+
+Detected servers are stored in `.aiops.yaml` and injected into generated rules so the AI knows which MCP tools are available and should be used proactively.
 
 ### Build Commands
 

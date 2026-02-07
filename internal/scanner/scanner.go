@@ -1,6 +1,7 @@
 package scanner
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
@@ -21,8 +22,85 @@ func Scan(dir string) (*config.DetectedStack, error) {
 	stack.Build = detectBuild(dir, langs, frameworks)
 	stack.Patterns = detectPatterns(dir)
 	stack.GoModule = detectGoModule(dir)
+	stack.MCPServers = detectMCPServers(dir)
 
 	return stack, nil
+}
+
+// mcpConfigFile represents the JSON structure of MCP config files.
+// All IDEs use the same format: {"mcpServers": {"name": {"command": ..., "args": ...}}}
+type mcpConfigFile struct {
+	MCPServers map[string]mcpServerEntry `json:"mcpServers"`
+}
+
+type mcpServerEntry struct {
+	Command string   `json:"command"`
+	Args    []string `json:"args"`
+	URL     string   `json:"url"` // for HTTP/SSE transports
+}
+
+// detectMCPServers scans all known MCP config locations and returns a deduplicated list.
+func detectMCPServers(dir string) []config.MCPServer {
+	home, _ := os.UserHomeDir()
+	var servers []config.MCPServer
+	seen := map[string]bool{}
+
+	// MCP config file locations: (path, source label)
+	locations := []struct {
+		path   string
+		source string
+	}{
+		// Global configs
+		{filepath.Join(home, ".codeium", "windsurf", "mcp_config.json"), "windsurf"},
+		{filepath.Join(home, ".cursor", "mcp.json"), "cursor"},
+		{filepath.Join(home, ".continue", "config.json"), "continue"},
+		// Project-level configs
+		{filepath.Join(dir, ".cursor", "mcp.json"), "cursor"},
+		{filepath.Join(dir, ".vscode", "mcp.json"), "vscode"},
+		{filepath.Join(dir, ".windsurf", "mcp_config.json"), "windsurf"},
+		{filepath.Join(dir, "mcp.json"), "project"},
+	}
+
+	for _, loc := range locations {
+		entries := parseMCPConfig(loc.path)
+		for _, e := range entries {
+			if seen[e.Name] {
+				continue
+			}
+			seen[e.Name] = true
+			e.Source = loc.source
+			servers = append(servers, e)
+		}
+	}
+
+	return servers
+}
+
+// parseMCPConfig reads an MCP config JSON file and extracts server entries.
+func parseMCPConfig(path string) []config.MCPServer {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return nil
+	}
+
+	var cfg mcpConfigFile
+	if err := json.Unmarshal(data, &cfg); err != nil {
+		return nil
+	}
+
+	var servers []config.MCPServer
+	for name, entry := range cfg.MCPServers {
+		cmd := entry.Command
+		if cmd == "" && entry.URL != "" {
+			cmd = "http" // remote MCP
+		}
+		servers = append(servers, config.MCPServer{
+			Name:    name,
+			Command: cmd,
+		})
+	}
+
+	return servers
 }
 
 // detectGoModule finds the Go module path from go.mod files.

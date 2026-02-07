@@ -41,6 +41,14 @@ type DetectedStack struct {
 	Build      BuildInfo   `yaml:"build"`
 	Patterns   []string    `yaml:"patterns"`
 	GoModule   string      `yaml:"go_module,omitempty"`
+	MCPServers []MCPServer `yaml:"mcp_servers,omitempty"`
+}
+
+// MCPServer represents a detected MCP server configuration.
+type MCPServer struct {
+	Name    string `yaml:"name"`              // Server name (key from mcpServers)
+	Command string `yaml:"command,omitempty"` // e.g., "npx", "uvx", "node"
+	Source  string `yaml:"source"`            // Where it was found: "windsurf", "cursor", "vscode", "project"
 }
 
 // Language represents a detected programming language.
