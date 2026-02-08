@@ -137,13 +137,18 @@ func cmdInit() {
 	}
 	fmt.Println()
 
+	// 5b. Detect project maturity
+	maturity := scanner.DetectMaturity(dir)
+	fmt.Printf("Project maturity: %s\n", maturity)
+
 	// 6. Build config
 	paths := config.DefaultPaths()
 	paths.Targets = targetNames
 	cfg := &config.ProjectConfig{
 		Version: config.Version,
 		Project: config.Project{
-			Name: projectName,
+			Name:     projectName,
+			Maturity: maturity,
 		},
 		Paths:    paths,
 		Detected: *stack,
@@ -169,11 +174,20 @@ func cmdInit() {
 	}
 
 	fmt.Printf("\n✅ aiops initialized! %d files generated.\n", len(files))
-	fmt.Println("\nNext steps:")
-	fmt.Println("  1. Review the generated files")
-	fmt.Println("  2. Commit them to version control")
-	fmt.Println("  3. Open a new AI session — the rules are now active")
-	fmt.Println("  4. Run `aiops status` to check for updates later")
+
+	if maturity == config.MaturityBootstrap {
+		fmt.Println("\n🚀 Bootstrap mode detected — recommended first actions:")
+		fmt.Println("  1. Open an AI session and run: /multiagency design.yaml")
+		fmt.Println("  2. Produce architecture.md, risks.md, assumptions.md")
+		fmt.Println("  3. After architecture is framed, start building (single-agent)")
+		fmt.Println("  4. Run `aiops sync` after the project matures")
+	} else {
+		fmt.Println("\nNext steps:")
+		fmt.Println("  1. Review the generated files")
+		fmt.Println("  2. Commit them to version control")
+		fmt.Println("  3. Open a new AI session — the rules are now active")
+		fmt.Println("  4. Run `aiops status` to check for updates later")
+	}
 }
 
 // --- scan command ---
@@ -484,12 +498,17 @@ func cmdSync() {
 		}
 	}
 
-	hasChanges := len(added) > 0 || len(removed) > 0 || len(addedTargets) > 0 || len(removedTargets) > 0
+	// Re-detect maturity
+	newMaturity := scanner.DetectMaturity(dir)
+	maturityChanged := newMaturity != cfg.Project.Maturity
+
+	hasChanges := len(added) > 0 || len(removed) > 0 || len(addedTargets) > 0 || len(removedTargets) > 0 || maturityChanged
 
 	if !hasChanges {
-		fmt.Println("✓ No changes detected. MCPs and targets are up to date.")
+		fmt.Println("✓ No changes detected. MCPs, targets, and maturity are up to date.")
 		fmt.Printf("  MCP servers: %d\n", len(cfg.Detected.MCPServers))
 		fmt.Printf("  Targets: %s\n", strings.Join(cfg.Paths.Targets, ", "))
+		fmt.Printf("  Maturity: %s\n", cfg.Project.Maturity)
 		return
 	}
 
@@ -506,10 +525,14 @@ func cmdSync() {
 	for _, name := range removedTargets {
 		fmt.Printf("  - Target removed: %s\n", name)
 	}
+	if maturityChanged {
+		fmt.Printf("  ↑ Maturity changed: %s → %s\n", cfg.Project.Maturity, newMaturity)
+	}
 
 	// Update config
 	cfg.Detected.MCPServers = stack.MCPServers
 	cfg.Paths.Targets = targetNames
+	cfg.Project.Maturity = newMaturity
 
 	if err := config.Save(dir, cfg); err != nil {
 		fmt.Fprintf(os.Stderr, "Error saving config: %v\n", err)

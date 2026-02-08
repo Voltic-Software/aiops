@@ -1,0 +1,156 @@
+version: "1.0"
+name: "Risk Discovery Workflow"
+
+llm:
+  provider: cascade
+  model: current
+  temperature: 0.0
+  max_tokens: 4096
+
+agents:
+  - id: explorer
+    role: "You are a senior engineer performing initial reconnaissance on a new project."
+    goal: "Map the unknowns, assumptions, and risks in this project before any code is written."
+    constraints:
+      - "Focus on what is NOT known, not what is known"
+      - "Identify implicit assumptions that could break later"
+      - "Consider technical, organizational, and domain risks"
+      - "Do not propose solutions — only surface risks"
+      - "Categorize risks: technical, integration, domain, operational, security"
+    input_from: []
+    output_schema:
+      type: object
+      properties:
+        project_understanding:
+          type: string
+          description: "Brief summary of what this project is trying to achieve"
+        unknowns:
+          type: array
+          description: "Things we don't know yet that could affect the project"
+          items:
+            type: object
+            properties:
+              area:
+                type: string
+              question:
+                type: string
+              impact:
+                type: string
+                enum: ["blocking", "high", "medium", "low"]
+        assumptions:
+          type: array
+          description: "Implicit assumptions being made"
+          items:
+            type: object
+            properties:
+              assumption:
+                type: string
+              risk_if_wrong:
+                type: string
+        risks:
+          type: array
+          description: "Identified risks"
+          items:
+            type: object
+            properties:
+              category:
+                type: string
+                enum: ["technical", "integration", "domain", "operational", "security"]
+              description:
+                type: string
+              likelihood:
+                type: string
+                enum: ["high", "medium", "low"]
+              impact:
+                type: string
+                enum: ["high", "medium", "low"]
+      required:
+        - project_understanding
+        - unknowns
+        - assumptions
+        - risks
+
+  - id: challenger
+    role: "You are a skeptical technical lead who has seen projects fail."
+    goal: "Challenge the explorer's findings — find what they missed."
+    constraints:
+      - "Focus on risks the explorer overlooked"
+      - "Consider scaling, team dynamics, and timeline risks"
+      - "Think about what happens 6 months from now"
+      - "Identify dependencies that could become bottlenecks"
+      - "Do not repeat risks already identified"
+    input_from:
+      - explorer
+    output_schema:
+      type: object
+      properties:
+        missed_risks:
+          type: array
+          items:
+            type: object
+            properties:
+              category:
+                type: string
+              description:
+                type: string
+              why_missed:
+                type: string
+        challenged_assumptions:
+          type: array
+          items:
+            type: object
+            properties:
+              original_assumption:
+                type: string
+              challenge:
+                type: string
+        dependency_risks:
+          type: array
+          items:
+            type: object
+            properties:
+              dependency:
+                type: string
+              risk:
+                type: string
+      required:
+        - missed_risks
+
+  - id: synthesizer
+    role: "You are a technical writer producing actionable project documentation."
+    goal: "Produce three documents: architecture.md, risks.md, assumptions.md"
+    constraints:
+      - "Merge findings from explorer and challenger"
+      - "Deduplicate and prioritize"
+      - "Format as clean markdown suitable for committing to the repo"
+      - "Each document should be self-contained and readable"
+      - "Include action items for blocking unknowns"
+    input_from:
+      - explorer
+      - challenger
+    output_schema:
+      type: object
+      properties:
+        architecture_md:
+          type: string
+          description: "Content for architecture.md — high-level system overview"
+        risks_md:
+          type: string
+          description: "Content for risks.md — prioritized risk register"
+        assumptions_md:
+          type: string
+          description: "Content for assumptions.md — documented assumptions to revisit"
+        blocking_actions:
+          type: array
+          description: "Actions that must be resolved before building"
+          items:
+            type: string
+      required:
+        - architecture_md
+        - risks_md
+        - assumptions_md
+
+pipeline:
+  - agent: explorer
+  - agent: challenger
+  - agent: synthesizer

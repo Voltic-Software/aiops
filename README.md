@@ -16,17 +16,40 @@ AI-powered operations infrastructure for your codebase. Installs senior-engineer
 - **Escalation budget** — prevents over-cautious behavior
 - **Human override** (`@directive`) — escape hatch that overrides process, not safety
 
+## Installation
+
+### Option 1: Install script (recommended)
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/voltic-software/aiops/main/install.sh | sh
+```
+
+### Option 2: Go install
+
+```bash
+go install github.com/voltic-software/aiops/cmd/aiops@latest
+```
+
+### Option 3: Build from source
+
+```bash
+git clone https://github.com/voltic-software/aiops.git
+cd aiops
+make install
+```
+
 ## Quick Start
 
 ```bash
-# Build the CLI
-cd aiops && go build -o aiops ./cmd/aiops
-
 # Initialize in your project
-./aiops init --dir /path/to/your/project
+cd your-project
+aiops init
 
-# Check what's installed
-./aiops status --dir /path/to/your/project
+# After adding/removing MCP servers or IDEs
+aiops sync
+
+# Check for drift
+aiops status
 ```
 
 ## Commands
@@ -54,6 +77,7 @@ Is this correct? [Y/n] y
 Project name [myproject]: myproject
 
 IDE targets: Windsurf (Cascade), Cursor, GitHub Copilot
+Project maturity: bootstrap
 
 Generating artifacts...
   ✓ global_rules.md (Windsurf)
@@ -74,8 +98,15 @@ Generating artifacts...
   ✓ multiagency/specs/code_review.yaml
   ✓ multiagency/specs/manager.yaml
   ✓ multiagency/specs/evolution_audit.yaml
+  ✓ multiagency/specs/risks.yaml
 
-✅ aiops initialized! 27 files generated.
+✅ aiops initialized! 28 files generated.
+
+🚀 Bootstrap mode detected — recommended first actions:
+  1. Open an AI session and run: /multiagency design.yaml
+  2. Produce architecture.md, risks.md, assumptions.md
+  3. After architecture is framed, start building (single-agent)
+  4. Run `aiops sync` after the project matures
 ```
 
 ### `aiops scan`
@@ -94,7 +125,7 @@ Detected:
 
 ### `aiops sync`
 
-Re-scans MCP servers and IDE targets, updates config and re-renders rules. No questions asked — designed to be fast and scriptable.
+Re-scans MCP servers, IDE targets, and project maturity. Updates config and re-renders rules. No questions asked — designed to be fast and scriptable.
 
 ```
 $ aiops sync
@@ -102,14 +133,14 @@ $ aiops sync
 aiops sync — myproject
 
   + MCP added: postgres (cursor)
-  + MCP added: slack (cursor)
+  ↑ Maturity changed: bootstrap → active
 
 Re-rendering artifacts...
 
-✅ Synced. 27 files updated.
+✅ Synced. 28 files updated.
 ```
 
-Run this after adding or removing an MCP server in any IDE. Can also be hooked into IDE startup or a git hook.
+Run this after adding/removing MCP servers, installing new IDEs, or when the project grows past bootstrap stage.
 
 ### `aiops status`
 
@@ -282,10 +313,29 @@ aiops/
 - **`.go.tmpl` extension** — prevents compiler from treating template Go files as source code
 - **`{{.MultiagencyMod}}`** — import paths derived from detected Go module path
 
+## Phased Activation (Project Maturity)
+
+aiops automatically detects project maturity and adapts AI behavior accordingly.
+
+| Maturity      | Detected when                      | Multi-agency     | Escalation budget | Default mode |
+| ------------- | ---------------------------------- | ---------------- | ----------------- | ------------ |
+| **bootstrap** | < 10 source files, no CI, no tests | Auto-recommended | 4 per session     | Design-first |
+| **active**    | Has source code, building          | Escalation-based | 2 per session     | Single-agent |
+| **mature**    | Has CI + tests + packages          | Strict gating    | 1 per session     | Single-agent |
+
+**Bootstrap mode** recommends multi-agency for architecture and risk discovery before any code is written. The generated rules include specific guidance:
+
+- Run `/multiagency design.yaml` to lay out architecture
+- Run `/multiagency risks.yaml` to surface unknowns
+- Produce `architecture.md`, `risks.md`, `assumptions.md` as one-time snapshots
+
+Maturity transitions automatically when you run `aiops sync` — as the project grows, rules adapt.
+
 ## Design Principles
 
 - **Scan, don't configure** — detect the stack, don't ask 20 questions
 - **Templates, not copy-paste** — templates are parameterized by detected stack
+- **Phased activation** — multi-agency is a thinking tool at start, gated at scale
 - **Baseline vs project state** — aiops generates baseline artifacts; project-specific learning stays in separate files
 - **Proposals, not mutation** — the evolution audit proposes changes, humans approve
 - **Human approves everything** — aiops generates, it never auto-applies
@@ -332,4 +382,4 @@ Auto-detected based on language and framework. Includes build, test, and code ge
 - `aiops update` across repos (pull from a shared template repo)
 - Version pinning for templates
 - Target-specific template overrides (e.g., Cursor-specific prompt format)
-- `go install github.com/voltic-software/aiops/cmd/aiops@latest` distribution
+- `aiops watch` — file watcher for auto-sync on MCP config changes

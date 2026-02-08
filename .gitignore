@@ -1,6 +1,8 @@
 # Binary
 /aiops
 *.exe
+bin/
+dist/
 
 # OS
 .DS_Store

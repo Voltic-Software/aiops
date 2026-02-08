@@ -39,6 +39,10 @@ type TemplateData struct {
 	HasMonorepo    bool
 	HasMCP         bool
 	MCPServers     []config.MCPServer
+	Maturity       string // bootstrap, active, mature
+	IsBootstrap    bool
+	IsActive       bool
+	IsMature       bool
 }
 
 // NewTemplateData builds template data from a project config.
@@ -101,6 +105,11 @@ func NewTemplateData(cfg *config.ProjectConfig) *TemplateData {
 	if len(td.MCPServers) > 0 {
 		td.HasMCP = true
 	}
+
+	td.Maturity = cfg.Project.Maturity
+	td.IsBootstrap = cfg.Project.Maturity == config.MaturityBootstrap
+	td.IsActive = cfg.Project.Maturity == config.MaturityActive
+	td.IsMature = cfg.Project.Maturity == config.MaturityMature
 
 	return td
 }

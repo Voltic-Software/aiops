@@ -27,6 +27,116 @@ func Scan(dir string) (*config.DetectedStack, error) {
 	return stack, nil
 }
 
+// DetectMaturity infers project maturity from repository signals.
+//
+//	bootstrap: empty/new repo, no CI, very few source files
+//	active:    has source code but no CI or limited structure
+//	mature:    has CI, tests, multiple packages/modules
+func DetectMaturity(dir string) string {
+	sourceFiles := countSourceFiles(dir)
+	hasCI := fileExists(filepath.Join(dir, ".github", "workflows")) ||
+		fileExists(filepath.Join(dir, ".gitlab-ci.yml"))
+	hasTests := hasTestFiles(dir)
+	hasMultiplePackages := countDirs(dir, 2) > 5
+
+	// bootstrap: very few source files, no CI, no tests
+	if sourceFiles < 10 && !hasCI && !hasTests {
+		return config.MaturityBootstrap
+	}
+
+	// mature: has CI + tests + meaningful structure
+	if hasCI && hasTests && hasMultiplePackages {
+		return config.MaturityMature
+	}
+
+	// active: everything in between
+	return config.MaturityActive
+}
+
+// countSourceFiles counts files with common source extensions (non-recursive beyond depth 4).
+func countSourceFiles(dir string) int {
+	count := 0
+	exts := map[string]bool{
+		".go": true, ".ts": true, ".tsx": true, ".js": true, ".jsx": true,
+		".py": true, ".rs": true, ".java": true, ".rb": true, ".ex": true,
+	}
+	_ = filepath.WalkDir(dir, func(path string, d os.DirEntry, err error) error {
+		if err != nil {
+			return nil
+		}
+		if d.IsDir() {
+			name := d.Name()
+			if name == "node_modules" || name == "vendor" || name == ".git" || name == "dist" || name == "build" {
+				return filepath.SkipDir
+			}
+			// limit depth
+			rel, _ := filepath.Rel(dir, path)
+			if strings.Count(rel, string(filepath.Separator)) > 4 {
+				return filepath.SkipDir
+			}
+			return nil
+		}
+		if exts[filepath.Ext(path)] {
+			count++
+		}
+		return nil
+	})
+	return count
+}
+
+// hasTestFiles checks if any test files exist.
+func hasTestFiles(dir string) bool {
+	found := false
+	_ = filepath.WalkDir(dir, func(path string, d os.DirEntry, err error) error {
+		if err != nil || found {
+			return filepath.SkipAll
+		}
+		if d.IsDir() {
+			name := d.Name()
+			if name == "node_modules" || name == "vendor" || name == ".git" {
+				return filepath.SkipDir
+			}
+			return nil
+		}
+		name := d.Name()
+		if strings.HasSuffix(name, "_test.go") ||
+			strings.HasSuffix(name, ".test.ts") ||
+			strings.HasSuffix(name, ".test.tsx") ||
+			strings.HasSuffix(name, ".test.js") ||
+			strings.HasSuffix(name, "_test.py") ||
+			strings.HasSuffix(name, ".spec.ts") ||
+			strings.HasSuffix(name, ".spec.js") {
+			found = true
+			return filepath.SkipAll
+		}
+		return nil
+	})
+	return found
+}
+
+// countDirs counts directories up to a given depth.
+func countDirs(dir string, maxDepth int) int {
+	count := 0
+	_ = filepath.WalkDir(dir, func(path string, d os.DirEntry, err error) error {
+		if err != nil {
+			return nil
+		}
+		if d.IsDir() {
+			name := d.Name()
+			if name == "node_modules" || name == "vendor" || name == ".git" {
+				return filepath.SkipDir
+			}
+			rel, _ := filepath.Rel(dir, path)
+			if strings.Count(rel, string(filepath.Separator)) > maxDepth {
+				return filepath.SkipDir
+			}
+			count++
+		}
+		return nil
+	})
+	return count
+}
+
 // mcpConfigFile represents the JSON structure of MCP config files.
 // All IDEs use the same format: {"mcpServers": {"name": {"command": ..., "args": ...}}}
 type mcpConfigFile struct {
@@ -489,6 +599,11 @@ func findFiles(dir string, name string, maxDepth int) []string {
 func dirExists(base, sub string) bool {
 	info, err := os.Stat(filepath.Join(base, sub))
 	return err == nil && info.IsDir()
+}
+
+func fileExists(path string) bool {
+	_, err := os.Stat(path)
+	return err == nil
 }
 
 func appendFrameworkUnique(slice []Framework, fw Framework) []Framework {
