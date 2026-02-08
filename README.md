@@ -80,17 +80,18 @@ IDE targets: Windsurf (Cascade), Cursor, GitHub Copilot
 Project maturity: bootstrap
 
 Generating artifacts...
-  ✓ global_rules.md (Windsurf)
+  ✓ ~/.codeium/windsurf/memories/global_rules.md  (global policy)
+  ✓ .windsurf/rules/aiops.md                      (repo rules)
   ✓ .windsurf/workflows/default-mode.md
   ✓ .windsurf/workflows/orchestrator.md
   ✓ .windsurf/workflows/multiagency.md
   ✓ .windsurf/orchestrator/session_state.yaml
-  ✓ .cursor/rules/aiops.mdc
+  ✓ .cursor/rules/aiops.mdc                       (repo rules)
   ✓ .cursor/prompts/default-mode.md
   ✓ .cursor/prompts/orchestrator.md
   ✓ .cursor/prompts/multiagency.md
   ✓ .cursor/orchestrator/session_state.yaml
-  ✓ .github/copilot-instructions.md
+  ✓ .github/copilot-instructions.md                (repo rules)
   ✓ multiagency/go.mod
   ✓ multiagency/cmd/multiagency/main.go
   ✓ multiagency/internal/...
@@ -99,8 +100,9 @@ Generating artifacts...
   ✓ multiagency/specs/manager.yaml
   ✓ multiagency/specs/evolution_audit.yaml
   ✓ multiagency/specs/risks.yaml
+  ✓ decisions/0001-aiops-initialized.md
 
-✅ aiops initialized! 28 files generated.
+✅ aiops initialized! 29 files generated.
 
 🚀 Bootstrap mode detected — recommended first actions:
   1. Open an AI session and run: /multiagency design.yaml
@@ -287,15 +289,17 @@ A complete, compilable Go module generated with import paths derived from your d
 
 ```
 aiops/
-├── cmd/aiops/main.go               # CLI (init, scan, status, update, evolve, skills)
+├── cmd/aiops/main.go               # CLI (init, scan, sync, status, update, evolve, skills)
 ├── internal/
 │   ├── config/config.go            # .aiops.yaml schema and I/O
-│   ├── scanner/scanner.go          # Repo analysis + Go module detection
+│   ├── scanner/scanner.go          # Repo analysis, Go module detection, maturity detection
 │   ├── target/target.go            # IDE target definitions + auto-detection
 │   ├── renderer/
 │   │   ├── renderer.go             # Multi-target template rendering engine
-│   │   └── templates/              # Embedded Go templates
-│   │       ├── memories/           # → Rules (rendered per target)
+│   │   └── templates/
+│   │       ├── memories/           # → Global policy rules (Windsurf only)
+│   │       ├── repo_rules.md.tmpl  # → Repo implementation rules (all targets)
+│   │       ├── decisions/          # → Decisions memory scaffold
 │   │       ├── windsurf/           # → Workflows + orchestrator (rendered per target)
 │   │       └── multiagency/        # → Complete Go module (rendered once)
 │   ├── updater/updater.go          # Diff and apply template updates
@@ -306,12 +310,14 @@ aiops/
 
 **Key design decisions:**
 
-- **Target abstraction** — each IDE is a `Target` with path mappings for rules, workflows, orchestrator, and skills
+- **Policy/implementation split** — global rules define policy (constitutional law); repo rules define implementation (statutes). Repo rules win on conflict.
+- **Target abstraction** — each IDE is a `Target` with path mappings for global rules, repo rules, workflows, orchestrator, and skills
 - **Auto-detection** — scans for IDE config directories (`~/.codeium/windsurf/`, `.cursor/`, etc.)
 - **Render per target** — rules and workflows are rendered once per detected target with `{{.OrchestrDir}}` adapted
-- **Shared artifacts** — multiagency module is rendered once (IDE-independent)
+- **Shared artifacts** — multiagency module and decisions directory are rendered once (IDE-independent)
+- **Kill switch** — `.aiops/disabled` disables all orchestration, escalation, and multi-agency
+- **Decisions memory** — `decisions/` directory stores architectural decisions that agents must respect
 - **`.go.tmpl` extension** — prevents compiler from treating template Go files as source code
-- **`{{.MultiagencyMod}}`** — import paths derived from detected Go module path
 
 ## Phased Activation (Project Maturity)
 
@@ -331,9 +337,27 @@ aiops automatically detects project maturity and adapts AI behavior accordingly.
 
 Maturity transitions automatically when you run `aiops sync` — as the project grows, rules adapt.
 
+## Rules Architecture (Policy vs Implementation)
+
+aiops separates rules into two layers:
+
+| Layer                     | Contains                                                                                                     | Location                                   | Versioned? | Shared?  |
+| ------------------------- | ------------------------------------------------------------------------------------------------------------ | ------------------------------------------ | ---------- | -------- |
+| **Global (policy)**       | Core principles, escalation policy, intent guardrails, kill switch, repo auto-activation                     | `~/.codeium/windsurf/memories/`            | No         | Per-user |
+| **Repo (implementation)** | Maturity behavior, tier routing, escalation mechanics, MCP awareness, session coordination, decisions memory | `.windsurf/rules/`, `.cursor/rules/`, etc. | Yes (git)  | Via git  |
+
+**Global rules** are constitutional law — they apply everywhere and never reference repo-specific details. They include a **repo auto-activation** directive: if a repo has `.aiops/` config or IDE rules, adopt them immediately.
+
+**Repo rules** are statutes — they define how this specific project operates. They include maturity-aware behavior, project-specific patterns, and escalation transparency.
+
+**Kill switch:** Create `.aiops/disabled` in any repo to disable all orchestration, escalation, and multi-agency. The agent operates as a plain single-agent.
+
+**Decisions memory:** The `decisions/` directory stores architectural decisions (ADRs). Agents read these at session start and must not contradict them without escalation.
+
 ## Design Principles
 
 - **Scan, don't configure** — detect the stack, don't ask 20 questions
+- **Policy vs implementation** — global rules define _when_ to escalate; repo rules define _how_
 - **Templates, not copy-paste** — templates are parameterized by detected stack
 - **Phased activation** — multi-agency is a thinking tool at start, gated at scale
 - **Baseline vs project state** — aiops generates baseline artifacts; project-specific learning stays in separate files

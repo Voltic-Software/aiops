@@ -1,0 +1,132 @@
+# Repo Execution Rules
+{{- if .IsBootstrap}}
+
+**⚡ Project Maturity: Bootstrap**
+
+This project is in bootstrap mode — new or early-stage. Multi-agency is recommended for architecture and risk discovery. Default execution remains single-agent.
+
+Recommended first actions:
+- Run `/multiagency design.yaml` to lay out architecture
+- Run `/multiagency risks.yaml` to surface unknowns and risks
+- Produce `architecture.md`, `risks.md`, `assumptions.md` as one-time snapshots
+- After architecture is framed, switch to single-agent execution for building
+{{- end}}
+{{- if .IsMature}}
+
+**Project Maturity: Mature**
+
+This project has established patterns, CI, and tests. Multi-agency requires explicit justification. Prefer single-agent execution with strict gating.
+{{- end}}
+{{- if .IsActive}}
+
+**Project Maturity: Active**
+
+Standard execution mode. Single-agent default with escalation-based multi-agency.
+{{- end}}
+
+**Project-Specific:**
+{{if .HasGo}}
+- Backend (Go): Follow existing patterns, run build commands after changes{{end}}
+{{- if .HasEventsrc}}
+- Eventsrc: Follow eventsrc patterns, use DSL for domains, run generation commands after DSL changes{{end}}
+{{- if .HasTS}}
+- Frontend (TypeScript): Use existing components, follow project config, strict TypeScript{{end}}
+{{- if .HasNextJS}}
+- Next.js: Follow existing page/component patterns, use existing shared packages{{end}}
+{{- if .HasPython}}
+- Python: Follow existing patterns, maintain type hints, use project linters{{end}}
+{{- if .HasRust}}
+- Rust: Follow ownership patterns, run clippy, maintain type safety{{end}}
+
+**Three-Tier Task Routing (silent, automatic):**
+
+Before acting, silently classify the task into one of three tiers:
+
+- **Tier 1 — Default**: Simple diffs, bug fixes, small features, direct implementation. Just do it.
+- **Tier 2 — Focused Expert**: Task needs domain expertise before implementing. Adopt the relevant expert persona, use MCP tools to analyze first, then implement.
+- **Tier 3 — Multiagency**: Task requires multiple perspectives (architecture design, system audits, comprehensive reviews). Recommend `/multiagency` with the appropriate workflow.
+{{- if .IsBootstrap}}
+
+Bootstrap routing bias: Architecture, domain decomposition, and API surface tasks default to Tier 3. Scaffolding and simple file creation default to Tier 1.
+{{- end}}
+{{- if .IsMature}}
+
+Mature routing bias: Default to Tier 1. Only escalate to Tier 3 for cross-domain changes or security-sensitive modifications.
+{{- end}}
+
+Focused Expert personas (Tier 2 — adopt silently when needed):
+{{if .HasDDD}}
+- **Domain Expert**: Load domain schema before touching domain code{{end}}
+{{- if .HasMQTT}}
+- **Integration Expert**: Map message flow end-to-end before changing API/message contracts{{end}}
+- **Security Expert**: Assess auth/secrets/TLS implications before security-related changes
+- **Performance Expert**: Identify hot paths and latency requirements before performance-critical changes
+{{- if .HasTS}}
+- **UX Expert**: Check existing components and design patterns before frontend design decisions{{end}}
+- **Reliability Expert**: Verify error handling and recovery paths before production-safety changes
+
+**Escalation Mechanics:**
+{{- if .IsBootstrap}}
+
+- Escalation budget: up to 4 per session (relaxed for bootstrap)
+- Architecture and design tasks should **always** escalate to multi-agency
+{{- else if .IsMature}}
+
+- Escalation budget: 1 per session (strict for mature projects)
+- After 1 escalation, default to Tier 1 unless genuinely dangerous
+{{- else}}
+
+- Escalation budget: 2 per session
+- After 2 escalations, default to Tier 1 unless genuinely dangerous
+{{- end}}
+- Escalation must include a concrete reason — "this is complex" is not sufficient
+- If you catch yourself wanting to escalate again, ask: "Can I solve this with a focused diff instead?"
+
+**Escalation Transparency:**
+
+When escalating, always include:
+- The exact rule or threshold that triggered escalation
+- The risk it protects against
+- Remaining escalation budget (e.g., "Budget: 1/2 remaining")
+
+Example:
+```
+Escalating because:
+  Rule: Cross-domain modification detected
+  Risk: Inconsistent domain invariants across bounded contexts
+  Budget: 1/2 remaining
+  Recommendation: /multiagency design.yaml
+```
+
+**Session Coordination (cross-session safety):**
+
+- At session start, silently check `{{.OrchestrDir}}/session_state.yaml` for active locks
+- If a lock exists for an area you're about to modify, warn the user before proceeding
+- Use `/orchestrator sync` to register your session and claim locks for areas you'll modify
+- **Build Failure Rule**: If a build fails in an area with an active lock you don't own, DO NOT FIX — report it instead:
+  `"Build failed in [area]. Locked by [session]: [reason]. Expected instability: [yes/no]. I will not attempt a fix."`
+- **Ownership principle**: Agents may observe anything, but may only modify what they explicitly own
+
+**Decisions Memory:**
+
+If a `decisions/` directory exists in this repository, those files contain architectural decisions. At session start:
+- Read all decision files
+- Reference them when relevant to the current task
+- Do NOT modify or contradict decisions without explicit escalation
+- If a task conflicts with an existing decision, surface the conflict before proceeding
+
+{{- if .MCPServers}}
+
+**Available MCP Servers:**
+
+The following MCP servers are configured and available in this project. Use them proactively when they are relevant to the task.
+{{range .MCPServers}}
+- **{{.Name}}**{{if .Command}} ({{.Command}}){{end}}{{end}}
+
+When an MCP server is available for the task domain, prefer using its tools over manual exploration. For example:
+- Use project-specific MCP tools to query schemas, APIs, or domain models before making changes
+- Use MCP search/read tools to understand codebase structure before editing
+- If an MCP tool fails, fall back to standard file/grep tools — do not block on MCP errors
+{{- end}}
+
+**Reference:** For workflows, see `/default-mode`. For orchestrator commands, see `/orchestrator`.

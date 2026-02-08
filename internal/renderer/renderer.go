@@ -171,17 +171,31 @@ func renderForTarget(projectDir string, cfg *config.ProjectConfig, t target.Targ
 
 	var rendered []string
 
-	// 1. Render rules
-	rulesOut := t.ResolveRulesPath(projectDir)
-	if rulesOut != "" {
+	// 1a. Render global policy rules (only for targets with a global location, e.g. Windsurf)
+	globalOut := t.ResolveGlobalRulesPath()
+	if globalOut != "" {
 		output, err := renderTemplate("templates/memories/global_rules.md.tmpl", data)
 		if err != nil {
-			return nil, fmt.Errorf("rendering rules for %s: %w", t.Name, err)
+			return nil, fmt.Errorf("rendering global rules for %s: %w", t.Name, err)
 		}
-		if err := writeFile(rulesOut, output); err != nil {
+		if err := writeFile(globalOut, output); err != nil {
 			return nil, err
 		}
-		rel, _ := filepath.Rel(projectDir, rulesOut)
+		rel, _ := filepath.Rel(projectDir, globalOut)
+		rendered = append(rendered, rel)
+	}
+
+	// 1b. Render repo implementation rules (all targets get this in the project dir)
+	repoOut := t.ResolveRepoRulesPath(projectDir)
+	if repoOut != "" {
+		output, err := renderTemplate("templates/repo_rules.md.tmpl", data)
+		if err != nil {
+			return nil, fmt.Errorf("rendering repo rules for %s: %w", t.Name, err)
+		}
+		if err := writeFile(repoOut, output); err != nil {
+			return nil, err
+		}
+		rel, _ := filepath.Rel(projectDir, repoOut)
 		rendered = append(rendered, rel)
 	}
 
@@ -214,12 +228,13 @@ func renderForTarget(projectDir string, cfg *config.ProjectConfig, t target.Targ
 	return rendered, nil
 }
 
-// renderShared renders target-independent artifacts (multiagency).
+// renderShared renders target-independent artifacts (multiagency, decisions).
 func renderShared(projectDir string, cfg *config.ProjectConfig) ([]string, error) {
 	data := NewTemplateData(cfg)
 	data.TargetName = "shared"
 	var rendered []string
 
+	// Render multiagency module
 	multiagencyDir := cfg.Paths.Multiagency
 	if multiagencyDir == "" {
 		multiagencyDir = "multiagency"
@@ -250,8 +265,24 @@ func renderShared(projectDir string, cfg *config.ProjectConfig) ([]string, error
 		rendered = append(rendered, rel)
 		return nil
 	})
+	if err != nil {
+		return nil, err
+	}
 
-	return rendered, err
+	// Render decisions directory (only the seed file, skip if decisions already exist)
+	decisionsDir := filepath.Join(projectDir, "decisions")
+	if _, statErr := os.Stat(decisionsDir); os.IsNotExist(statErr) {
+		decFiles, err := renderDir("templates/decisions", decisionsDir, data)
+		if err != nil {
+			return nil, err
+		}
+		for _, f := range decFiles {
+			rel, _ := filepath.Rel(projectDir, f)
+			rendered = append(rendered, rel)
+		}
+	}
+
+	return rendered, nil
 }
 
 // renderTemplate renders a single template file and returns the output bytes.

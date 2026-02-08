@@ -7,14 +7,14 @@ import (
 
 // Target represents an IDE or AI extension that aiops generates artifacts for.
 type Target struct {
-	Name         string // e.g., "windsurf", "cursor", "continue", "copilot"
-	DisplayName  string // e.g., "Windsurf", "Cursor", "Continue (VS Code)", "GitHub Copilot"
-	RulesPath    string // Where global rules go (relative to project or absolute)
-	RulesAbsHome bool   // If true, RulesPath is relative to $HOME, not project dir
-	WorkflowsDir string // Where workflow/prompt files go (relative to project dir)
-	OrchestrDir  string // Where orchestrator state goes (relative to project dir)
-	SkillsDir    string // Where skill scaffolds go (relative to project dir)
-	RulesFormat  string // "markdown", "yaml", "mdc"
+	Name          string // e.g., "windsurf", "cursor", "continue", "copilot"
+	DisplayName   string // e.g., "Windsurf", "Cursor", "Continue (VS Code)", "GitHub Copilot"
+	GlobalRules   string // Where global policy rules go (relative to $HOME). Empty if target has no global location.
+	RepoRulesPath string // Where repo implementation rules go (relative to project dir)
+	WorkflowsDir  string // Where workflow/prompt files go (relative to project dir)
+	OrchestrDir   string // Where orchestrator state goes (relative to project dir)
+	SkillsDir     string // Where skill scaffolds go (relative to project dir)
+	RulesFormat   string // "markdown", "yaml", "mdc"
 }
 
 // All known targets.
@@ -26,56 +26,65 @@ var All = []Target{
 }
 
 var Windsurf = Target{
-	Name:         "windsurf",
-	DisplayName:  "Windsurf (Cascade)",
-	RulesPath:    filepath.Join(".codeium", "windsurf", "memories", "global_rules.md"),
-	RulesAbsHome: true,
-	WorkflowsDir: ".windsurf/workflows",
-	OrchestrDir:  ".windsurf/orchestrator",
-	SkillsDir:    ".windsurf/skills",
-	RulesFormat:  "markdown",
+	Name:          "windsurf",
+	DisplayName:   "Windsurf (Cascade)",
+	GlobalRules:   filepath.Join(".codeium", "windsurf", "memories", "global_rules.md"),
+	RepoRulesPath: ".windsurf/rules/aiops.md",
+	WorkflowsDir:  ".windsurf/workflows",
+	OrchestrDir:   ".windsurf/orchestrator",
+	SkillsDir:     ".windsurf/skills",
+	RulesFormat:   "markdown",
 }
 
 var Cursor = Target{
-	Name:         "cursor",
-	DisplayName:  "Cursor",
-	RulesPath:    ".cursor/rules/aiops.mdc",
-	RulesAbsHome: false,
-	WorkflowsDir: ".cursor/prompts",
-	OrchestrDir:  ".cursor/orchestrator",
-	SkillsDir:    ".cursor/skills",
-	RulesFormat:  "mdc",
+	Name:          "cursor",
+	DisplayName:   "Cursor",
+	GlobalRules:   "",
+	RepoRulesPath: ".cursor/rules/aiops.mdc",
+	WorkflowsDir:  ".cursor/prompts",
+	OrchestrDir:   ".cursor/orchestrator",
+	SkillsDir:     ".cursor/skills",
+	RulesFormat:   "mdc",
 }
 
 var Continue = Target{
-	Name:         "continue",
-	DisplayName:  "Continue (VS Code)",
-	RulesPath:    ".continue/rules/aiops.md",
-	RulesAbsHome: false,
-	WorkflowsDir: ".continue/prompts",
-	OrchestrDir:  ".continue/orchestrator",
-	SkillsDir:    ".continue/skills",
-	RulesFormat:  "markdown",
+	Name:          "continue",
+	DisplayName:   "Continue (VS Code)",
+	GlobalRules:   "",
+	RepoRulesPath: ".continue/rules/aiops.md",
+	WorkflowsDir:  ".continue/prompts",
+	OrchestrDir:   ".continue/orchestrator",
+	SkillsDir:     ".continue/skills",
+	RulesFormat:   "markdown",
 }
 
 var Copilot = Target{
-	Name:         "copilot",
-	DisplayName:  "GitHub Copilot",
-	RulesPath:    ".github/copilot-instructions.md",
-	RulesAbsHome: false,
-	WorkflowsDir: "", // Copilot doesn't support custom workflows
-	OrchestrDir:  "", // No orchestrator support
-	SkillsDir:    "", // No skills support
-	RulesFormat:  "markdown",
+	Name:          "copilot",
+	DisplayName:   "GitHub Copilot",
+	GlobalRules:   "",
+	RepoRulesPath: ".github/copilot-instructions.md",
+	WorkflowsDir:  "", // Copilot doesn't support custom workflows
+	OrchestrDir:   "", // No orchestrator support
+	SkillsDir:     "", // No skills support
+	RulesFormat:   "markdown",
 }
 
-// ResolveRulesPath returns the absolute path for the rules file.
-func (t *Target) ResolveRulesPath(projectDir string) string {
-	if t.RulesAbsHome {
-		home, _ := os.UserHomeDir()
-		return filepath.Join(home, t.RulesPath)
+// ResolveGlobalRulesPath returns the absolute path for the global policy rules file.
+// Returns empty string if this target has no global rules location.
+func (t *Target) ResolveGlobalRulesPath() string {
+	if t.GlobalRules == "" {
+		return ""
 	}
-	return filepath.Join(projectDir, t.RulesPath)
+	home, _ := os.UserHomeDir()
+	return filepath.Join(home, t.GlobalRules)
+}
+
+// ResolveRepoRulesPath returns the absolute path for the repo implementation rules file.
+func (t *Target) ResolveRepoRulesPath(projectDir string) string {
+	if t.RepoRulesPath == "" {
+		return ""
+	}
+	return filepath.Join(projectDir, t.RepoRulesPath)
 }
 
 // ResolveWorkflowsDir returns the absolute path for the workflows directory.

@@ -1,0 +1,39 @@
+# ADR-0001: aiops Initialized
+
+**Status:** Accepted
+**Date:** {{.Project.Name}} initialized with aiops
+**Maturity:** {{.Maturity}}
+
+## Context
+
+This project uses [aiops](https://github.com/voltic-software/aiops) for AI session management. The following decisions were made at initialization time and should be respected by all AI agents.
+
+## Decision
+
+- AI agents follow a **single-agent default** execution model
+- Multi-agency is available but **gated by escalation rules**
+- Architectural decisions are recorded in this `decisions/` directory
+- Agents must read decisions at session start and must NOT contradict them without explicit escalation
+
+## Adding Decisions
+
+Create new files in this directory using the format:
+
+```
+decisions/
+  0001-aiops-initialized.md
+  0002-your-architecture-decision.md
+  0003-your-technology-choice.md
+```
+
+Each decision should include:
+- **Status**: Proposed | Accepted | Deprecated | Superseded
+- **Context**: Why the decision was needed
+- **Decision**: What was decided
+- **Consequences**: What follows from this decision
+
+## Consequences
+
+- All AI agents will read and respect these decisions
+- Decisions cannot be overridden without escalation
+- This creates organizational memory that survives across sessions and teammates
