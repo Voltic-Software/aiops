@@ -141,7 +141,13 @@ func cmdInit() {
 	maturity := scanner.DetectMaturity(dir)
 	fmt.Printf("Project maturity: %s\n", maturity)
 
-	// 6. Build config
+	// 6. Detect existing skills and specs (from previous init or manual creation)
+	skills := scanner.DetectSkills(dir)
+	specs := scanner.DetectSpecs(dir)
+	stack.Skills = skills
+	stack.Specs = specs
+
+	// 7. Build config
 	paths := config.DefaultPaths()
 	paths.Targets = targetNames
 	cfg := &config.ProjectConfig{
@@ -154,19 +160,34 @@ func cmdInit() {
 		Detected: *stack,
 	}
 
-	// 7. Save config
+	// 8. Save config
 	if err := config.Save(dir, cfg); err != nil {
 		fmt.Fprintf(os.Stderr, "Error saving config: %v\n", err)
 		os.Exit(1)
 	}
 	fmt.Printf("✓ Created .aiops.yaml\n")
 
-	// 8. Render templates
+	// 9. Render templates (first pass — generates base specs)
 	fmt.Println("\nGenerating artifacts...")
 	files, err := renderer.RenderAll(dir, cfg)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error rendering templates: %v\n", err)
 		os.Exit(1)
+	}
+
+	// 10. Re-detect specs after first render (picks up newly generated specs)
+	newSpecs := scanner.DetectSpecs(dir)
+	if len(newSpecs) > len(specs) {
+		cfg.Detected.Specs = newSpecs
+		// Re-render workflows that reference specs (they now have the full list)
+		files2, err := renderer.RenderAll(dir, cfg)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Error re-rendering with specs: %v\n", err)
+			os.Exit(1)
+		}
+		files = files2
+		// Update saved config with detected specs
+		_ = config.Save(dir, cfg)
 	}
 
 	for _, f := range files {
@@ -502,13 +523,21 @@ func cmdSync() {
 	newMaturity := scanner.DetectMaturity(dir)
 	maturityChanged := newMaturity != cfg.Project.Maturity
 
-	hasChanges := len(added) > 0 || len(removed) > 0 || len(addedTargets) > 0 || len(removedTargets) > 0 || maturityChanged
+	// Re-detect skills and specs
+	newSkills := scanner.DetectSkills(dir)
+	newSpecs := scanner.DetectSpecs(dir)
+	skillsChanged := len(newSkills) != len(cfg.Detected.Skills)
+	specsChanged := len(newSpecs) != len(cfg.Detected.Specs)
+
+	hasChanges := len(added) > 0 || len(removed) > 0 || len(addedTargets) > 0 || len(removedTargets) > 0 || maturityChanged || skillsChanged || specsChanged
 
 	if !hasChanges {
-		fmt.Println("✓ No changes detected. MCPs, targets, and maturity are up to date.")
+		fmt.Println("✓ No changes detected. MCPs, targets, maturity, skills, and specs are up to date.")
 		fmt.Printf("  MCP servers: %d\n", len(cfg.Detected.MCPServers))
 		fmt.Printf("  Targets: %s\n", strings.Join(cfg.Paths.Targets, ", "))
 		fmt.Printf("  Maturity: %s\n", cfg.Project.Maturity)
+		fmt.Printf("  Skills: %d\n", len(cfg.Detected.Skills))
+		fmt.Printf("  Specs: %d\n", len(cfg.Detected.Specs))
 		return
 	}
 
@@ -528,9 +557,17 @@ func cmdSync() {
 	if maturityChanged {
 		fmt.Printf("  ↑ Maturity changed: %s → %s\n", cfg.Project.Maturity, newMaturity)
 	}
+	if skillsChanged {
+		fmt.Printf("  ↑ Skills changed: %d → %d\n", len(cfg.Detected.Skills), len(newSkills))
+	}
+	if specsChanged {
+		fmt.Printf("  ↑ Specs changed: %d → %d\n", len(cfg.Detected.Specs), len(newSpecs))
+	}
 
 	// Update config
 	cfg.Detected.MCPServers = stack.MCPServers
+	cfg.Detected.Skills = newSkills
+	cfg.Detected.Specs = newSpecs
 	cfg.Paths.Targets = targetNames
 	cfg.Project.Maturity = newMaturity
 

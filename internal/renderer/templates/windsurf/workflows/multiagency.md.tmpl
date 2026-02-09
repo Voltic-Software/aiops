@@ -2,9 +2,23 @@
 description: Execute a multi-agent workflow for complex tasks requiring multiple perspectives
 ---
 
-# Multi-Agent Workflow Executor
+# Multi-Agent Workflow Execution
 
-When the user runs `/multiagency`, execute a multi-agent workflow from a YAML spec file.
+This workflow enables the AI to execute multi-agent pipelines for complex tasks that benefit from structured, multi-perspective analysis.
+
+**Note:** For most tasks, use the default single-agent mode (`/default-mode`). Escalate to multiagency only when the task genuinely requires multiple perspectives or involves significant architectural decisions.
+
+## When to Use This Workflow
+
+Use multiagency when escalated from default mode, or when the request explicitly involves:
+
+- **System design** requiring architecture decisions
+- **Code review** needing security, performance, and quality analysis
+- **System audits** of domains, integrations, or reliability
+- **Complex problem-solving** that benefits from critique and iteration
+- **Documentation** requiring multiple expert perspectives
+
+Keywords that suggest multiagency: "design", "architect", "review", "audit", "analyze thoroughly", "multiple perspectives", "critique"
 
 ## Usage
 
@@ -14,24 +28,99 @@ When the user runs `/multiagency`, execute a multi-agent workflow from a YAML sp
 
 ## Available Workflows
 
-| Workflow | Purpose |
-|---|---|
-| `design.yaml` | Architecture and system design (Architect → Critic → Fixer → Finalizer) |
-| `code_review.yaml` | Code review (Analyzer → Security → Performance → Summarizer) |
-| `manager.yaml` | Task classification and planning (Classifier → Planner) |
-| `evolution_audit.yaml` | Knowledge freshness audit (Discovery → Proposal) |
+Located in `{{.SpecsDir}}/`:
+{{- if .HasSpecs}}
+{{range $i, $spec := .Specs}}
+{{$n := add $i 1}}{{$n}}. **{{$spec.File}}** - {{$spec.Name}}
+   - {{$spec.Agents}}
+{{- end}}
+{{- else}}
+
+1. **design.yaml** - System architecture design
+   - Architect → Critic → Fixer → Finalizer
+
+2. **code_review.yaml** - Comprehensive code review
+   - Analyzer → Security Reviewer → Performance Reviewer → Summarizer
+
+3. **manager.yaml** - Task decomposition and planning
+   - Classifier → Planner
+
+4. **evolution_audit.yaml** - Codebase knowledge freshness
+   - Discovery → Proposal
+
+5. **risks.yaml** - Risk discovery (bootstrap)
+   - Explorer → Challenger → Synthesizer
+{{- end}}
 
 ## Execution Steps
 
-1. **Read the spec**: Load the YAML file from `{{.Project.Name}}/multiagency/specs/`
-2. **For each agent in order**:
-   a. Adopt the agent's `role` as your persona
-   b. Work toward the agent's `goal`
-   c. Follow all `constraints`
-   d. If `mcp_tools` are listed, use them to gather context
-   e. If `input_from` lists previous agents, incorporate their outputs
-   f. Produce output matching the `output_schema`
-3. **Present final output** to the user
+### Step 1: Load the Spec
+
+Read the YAML spec file from `{{.SpecsDir}}/`.
+
+### Step 2: Execute Each Agent Sequentially
+
+For each agent in the workflow:
+
+1. **Adopt the agent's role** — Become the persona described
+2. **Use specified MCP tools** — If the agent has `mcp_tools`, use them to gather context
+3. **Consider previous outputs** — Use outputs from agents listed in `input_from`
+4. **Produce structured output** — Return JSON matching the `output_schema`
+
+### Step 3: Agent Execution Template
+
+For each agent, follow this pattern:
+
+```
+## Executing Agent: [agent_id]
+
+**Role:** [role description]
+**Goal:** [goal]
+
+### Gathering Context
+[If mcp_tools specified, call those tools first]
+[If input_from specified, reference those previous outputs]
+
+### Analysis
+[Perform the agent's task following constraints]
+
+### Output
+{
+  // Structured JSON output matching output_schema
+}
+```
+
+### Step 4: Final Summary
+
+After all agents complete, provide:
+
+1. Executive summary of the workflow results
+2. Key findings from each agent
+3. Recommended next steps
+{{- if .HasMCP}}
+
+## Using MCP Tools
+
+When an agent specifies MCP tools, use them to gather domain knowledge:
+{{range .MCPServers}}
+- Tools from `{{.Name}}` server — domain-specific queries, schema inspection, codebase search
+{{- end}}
+{{- end}}
+
+## Example Execution
+
+User: "Design a notification system"
+
+1. Load spec: read `{{.SpecsDir}}/design.yaml`
+2. Execute architect agent (propose architecture)
+3. Execute critic agent (identify issues, using architect output)
+4. Execute fixer agent (address issues, using architect + critic outputs)
+5. Execute finalizer agent (produce final document)
+6. Summarize results
+
+## State Management
+
+For long workflows or if interrupted, track progress by noting which agents have completed and their outputs. Resume from the last completed agent.
 
 ## Rules
 
@@ -40,3 +129,13 @@ When the user runs `/multiagency`, execute a multi-agent workflow from a YAML sp
 - Do not skip agents or combine steps
 - If an agent's output reveals the task is simpler than expected, say so
 - All outputs should be structured JSON matching the schema
+
+## LLM Compatibility Note
+
+This workflow works best with models that:
+
+- Follow structured output formats (JSON)
+- Use MCP tools effectively
+- Maintain context across multiple steps
+
+If the current model doesn't use MCP tools well, explicitly call them and include the results in the analysis.

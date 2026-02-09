@@ -39,6 +39,11 @@ type TemplateData struct {
 	HasMonorepo    bool
 	HasMCP         bool
 	MCPServers     []config.MCPServer
+	Skills         []config.DetectedSkill
+	Specs          []config.DetectedSpec
+	HasSkills      bool
+	HasSpecs       bool
+	SpecsDir       string // absolute path to specs dir for this project
 	Maturity       string // bootstrap, active, mature
 	IsBootstrap    bool
 	IsActive       bool
@@ -105,6 +110,16 @@ func NewTemplateData(cfg *config.ProjectConfig) *TemplateData {
 	if len(td.MCPServers) > 0 {
 		td.HasMCP = true
 	}
+
+	td.Skills = cfg.Detected.Skills
+	td.HasSkills = len(td.Skills) > 0
+	td.Specs = cfg.Detected.Specs
+	td.HasSpecs = len(td.Specs) > 0
+	multiagencyDir := cfg.Paths.Multiagency
+	if multiagencyDir == "" {
+		multiagencyDir = "multiagency"
+	}
+	td.SpecsDir = multiagencyDir + "/specs"
 
 	td.Maturity = cfg.Project.Maturity
 	td.IsBootstrap = cfg.Project.Maturity == config.MaturityBootstrap
@@ -252,6 +267,13 @@ func renderShared(projectDir string, cfg *config.ProjectConfig) ([]string, error
 		outPath := filepath.Join(projectDir, multiagencyDir, relPath)
 		outPath = strings.TrimSuffix(outPath, ".tmpl")
 
+		// Skip spec files that already exist (don't overwrite custom specs)
+		if strings.HasPrefix(relPath, "specs/") {
+			if _, statErr := os.Stat(outPath); statErr == nil {
+				return nil
+			}
+		}
+
 		output, err := renderFileContent(path, data)
 		if err != nil {
 			return err
@@ -373,6 +395,9 @@ func writeFile(path string, content []byte) error {
 func templateFuncs() template.FuncMap {
 	return template.FuncMap{
 		"join": strings.Join,
+		"add": func(a, b int) int {
+			return a + b
+		},
 		"indent": func(n int, s string) string {
 			pad := strings.Repeat(" ", n)
 			lines := strings.Split(s, "\n")

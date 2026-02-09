@@ -4,11 +4,26 @@ description: Default execution mode for single-agent tasks - pragmatic, codebase
 
 # Default Execution Mode — Reference Manual
 
-This is the expanded reference for the rules defined in `global_rules.md`. The global rules are always active; this document provides detailed examples, tables, and procedures.
+This is the expanded reference for the rules defined in the repo rules file. The repo rules are always active; this document provides detailed examples, tables, and procedures.
+{{- if .HasMCP}}
 
 ## MCP Tools Reference
 
 Ground your understanding before making changes. Use available MCP tools to verify assumptions against the actual codebase before writing code.
+
+| Tool | When to Use |
+|---|---|
+{{- range .MCPServers}}
+| Tools from `{{.Name}}` server | Domain-specific queries, codebase search, schema inspection |
+{{- end}}
+
+When an MCP server is available for the task domain, prefer using its tools over manual file exploration.
+{{- else}}
+
+## MCP Tools Reference
+
+Ground your understanding before making changes. Use available tools (search, file reading, grep) to verify assumptions against the actual codebase before writing code.
+{{- end}}
 
 ## Tier Routing — Examples
 
@@ -19,19 +34,45 @@ Ground your understanding before making changes. Use available MCP tools to veri
 - "Update this endpoint response" → Targeted change following existing patterns
 
 ### Tier 2 — Focused Expert (Analyze First, Then Implement)
+{{- if .HasSkills}}
 
-Task requires domain expertise before writing code. Use MCP tools and project knowledge to gather context before implementing.
+| Skill | Trigger | What It Provides |
+|---|---|---|
+{{- range .Skills}}
+| `@{{.Name}}` | {{if .Trigger}}{{.Trigger}}{{else}}{{.Description}}{{end}} | Structured procedure + reference materials |
+{{- end}}
+
+Each skill includes supporting reference files that are read automatically when invoked.
+{{- end}}
 
 **Focused Expert Behavior:**
 
-1. Identify the relevant domain/area
-2. Use MCP tools to gather context
-3. Analyze the impact and constraints
-4. Then implement with full understanding
+1. {{if .HasSkills}}Auto-invoke the relevant skill based on task description{{else}}Identify the relevant domain/area{{end}}
+2. {{if .HasSkills}}Skill provides structured procedure + reference materials{{else}}Gather context from the codebase{{end}}
+3. Use MCP tools to gather domain context before writing code
+4. Analyze the impact and constraints
+5. Then implement with full understanding
+{{- if .HasSkills}}
+
+**Examples:**
+{{- range .Skills}}
+- Task involving {{.Name}} → `@{{.Name}}` auto-invokes
+{{- end}}
+{{- end}}
 
 ### Tier 3 — Multiagency (Escalate)
+{{- if .HasSpecs}}
 
-**Escalation Budget**: Max 2 escalations per session. After 2, default to Tier 1 unless genuinely dangerous. Each escalation must include a concrete reason — "this is complex" is not sufficient.
+**Available workflows:**
+
+| Workflow | Purpose | Pipeline |
+|---|---|---|
+{{- range .Specs}}
+| `{{.File}}` | {{.Name}} | {{.Agents}} |
+{{- end}}
+{{- end}}
+
+**Escalation Budget**: Max {{if .IsBootstrap}}4{{else if .IsMature}}1{{else}}2{{end}} escalations per session. After that, default to Tier 1 unless genuinely dangerous. Each escalation must include a concrete reason — "this is complex" is not sufficient.
 
 **Escalation format:**
 
@@ -62,6 +103,18 @@ Build failed → Check area → Active lock?
   ├─ YES, lock denies external fixes → REPORT ONLY (do not fix)
   └─ NO lock → Safe to fix
 ```
+{{- if .HasSkills}}
+
+## Knowledge Freshness
+
+Agent knowledge is stored in explicit artifacts, not agent memory:
+
+- **Skills directory** — Domain-specific procedures and reference files
+- **Repo rules** — Core principles and routing logic
+- **Decisions directory** — Architectural decisions (if present)
+
+Run `/multiagency evolution_audit.yaml` to detect knowledge drift and get update proposals.
+{{- end}}
 
 ## Project-Specific Guidelines
 {{if .HasGo}}
@@ -79,7 +132,8 @@ Build failed → Check area → Active lock?
 ### Frontend (TypeScript)
 {{if .HasNextJS}}
 - Follow Next.js page/component patterns{{end}}
-- Use existing shared components
+{{- if .HasReact}}
+- Use existing shared components and design system{{end}}
 - Maintain TypeScript strict typing
 {{- range .Build.Commands}}
 {{- if eq . "npx tsc --noEmit"}}

@@ -44,12 +44,14 @@ type Paths struct {
 
 // DetectedStack holds the auto-detected technology stack.
 type DetectedStack struct {
-	Languages  []Language  `yaml:"languages"`
-	Frameworks []Framework `yaml:"frameworks"`
-	Build      BuildInfo   `yaml:"build"`
-	Patterns   []string    `yaml:"patterns"`
-	GoModule   string      `yaml:"go_module,omitempty"`
-	MCPServers []MCPServer `yaml:"mcp_servers,omitempty"`
+	Languages  []Language      `yaml:"languages"`
+	Frameworks []Framework     `yaml:"frameworks"`
+	Build      BuildInfo       `yaml:"build"`
+	Patterns   []string        `yaml:"patterns"`
+	GoModule   string          `yaml:"go_module,omitempty"`
+	MCPServers []MCPServer     `yaml:"mcp_servers,omitempty"`
+	Skills     []DetectedSkill `yaml:"skills,omitempty"`
+	Specs      []DetectedSpec  `yaml:"specs,omitempty"`
 }
 
 // MCPServer represents a detected MCP server configuration.
@@ -57,6 +59,21 @@ type MCPServer struct {
 	Name    string `yaml:"name"`              // Server name (key from mcpServers)
 	Command string `yaml:"command,omitempty"` // e.g., "npx", "uvx", "node"
 	Source  string `yaml:"source"`            // Where it was found: "windsurf", "cursor", "vscode", "project"
+}
+
+// DetectedSkill represents a skill found in the project's skills directory.
+type DetectedSkill struct {
+	Name        string `yaml:"name"`
+	Description string `yaml:"description,omitempty"`
+	Trigger     string `yaml:"trigger,omitempty"`
+}
+
+// DetectedSpec represents a multiagency spec YAML found in the project.
+type DetectedSpec struct {
+	File        string `yaml:"file"`                  // e.g., "design.yaml"
+	Name        string `yaml:"name"`                  // from spec's name: field
+	Description string `yaml:"description,omitempty"` // brief purpose
+	Agents      string `yaml:"agents,omitempty"`      // pipeline summary, e.g., "Architect → Critic → Fixer"
 }
 
 // Language represents a detected programming language.

@@ -1,12 +1,14 @@
 package scanner
 
 import (
+	"bufio"
 	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
 
 	"github.com/voltic-software/aiops/internal/config"
+	"gopkg.in/yaml.v3"
 )
 
 // Scan analyzes a project directory and returns the detected technology stack.
@@ -135,6 +137,146 @@ func countDirs(dir string, maxDepth int) int {
 		return nil
 	})
 	return count
+}
+
+// DetectSkills scans the project's skills directories for SKILL.md files.
+// It looks in all known IDE skill locations.
+func DetectSkills(dir string) []config.DetectedSkill {
+	var skills []config.DetectedSkill
+	seen := map[string]bool{}
+
+	// Check all possible skill dirs
+	skillDirs := []string{
+		filepath.Join(dir, ".windsurf", "skills"),
+		filepath.Join(dir, ".cursor", "skills"),
+		filepath.Join(dir, ".continue", "skills"),
+	}
+
+	for _, skillDir := range skillDirs {
+		entries, err := os.ReadDir(skillDir)
+		if err != nil {
+			continue
+		}
+		for _, entry := range entries {
+			if !entry.IsDir() {
+				continue
+			}
+			skillFile := filepath.Join(skillDir, entry.Name(), "SKILL.md")
+			skill := parseSkillFrontmatter(skillFile)
+			if skill.Name == "" {
+				skill.Name = entry.Name()
+			}
+			if seen[skill.Name] {
+				continue
+			}
+			seen[skill.Name] = true
+			skills = append(skills, skill)
+		}
+	}
+
+	return skills
+}
+
+// parseSkillFrontmatter reads YAML frontmatter from a SKILL.md file.
+func parseSkillFrontmatter(path string) config.DetectedSkill {
+	f, err := os.Open(path)
+	if err != nil {
+		return config.DetectedSkill{}
+	}
+	defer f.Close()
+
+	scanner := bufio.NewScanner(f)
+	var inFrontmatter bool
+	var lines []string
+
+	for scanner.Scan() {
+		line := scanner.Text()
+		if strings.TrimSpace(line) == "---" {
+			if inFrontmatter {
+				break // end of frontmatter
+			}
+			inFrontmatter = true
+			continue
+		}
+		if inFrontmatter {
+			lines = append(lines, line)
+		}
+	}
+
+	if len(lines) == 0 {
+		return config.DetectedSkill{}
+	}
+
+	var skill config.DetectedSkill
+	_ = yaml.Unmarshal([]byte(strings.Join(lines, "\n")), &skill)
+	return skill
+}
+
+// DetectSpecs scans the project's multiagency/specs/ directory for YAML spec files.
+func DetectSpecs(dir string) []config.DetectedSpec {
+	var specs []config.DetectedSpec
+
+	specsDir := filepath.Join(dir, "multiagency", "specs")
+	entries, err := os.ReadDir(specsDir)
+	if err != nil {
+		return nil
+	}
+
+	for _, entry := range entries {
+		if entry.IsDir() || (!strings.HasSuffix(entry.Name(), ".yaml") && !strings.HasSuffix(entry.Name(), ".yml")) {
+			continue
+		}
+
+		spec := parseSpecFile(filepath.Join(specsDir, entry.Name()))
+		spec.File = entry.Name()
+		if spec.Name == "" {
+			spec.Name = strings.TrimSuffix(strings.TrimSuffix(entry.Name(), ".yaml"), ".yml")
+		}
+		specs = append(specs, spec)
+	}
+
+	return specs
+}
+
+// specFileHeader is a minimal parse of the spec YAML to extract name and agents.
+type specFileHeader struct {
+	Name   string `yaml:"name"`
+	Agents []struct {
+		ID   string `yaml:"id"`
+		Role string `yaml:"role"`
+	} `yaml:"agents"`
+}
+
+// parseSpecFile reads a multiagency spec YAML and extracts name + agent pipeline summary.
+func parseSpecFile(path string) config.DetectedSpec {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return config.DetectedSpec{}
+	}
+
+	var header specFileHeader
+	if err := yaml.Unmarshal(data, &header); err != nil {
+		return config.DetectedSpec{}
+	}
+
+	var agentNames []string
+	for _, a := range header.Agents {
+		// Convert agent ID to display name: snake_case → Title Case
+		name := a.ID
+		name = strings.ReplaceAll(name, "_", " ")
+		words := strings.Fields(name)
+		for i, w := range words {
+			if len(w) > 0 {
+				words[i] = strings.ToUpper(w[:1]) + w[1:]
+			}
+		}
+		agentNames = append(agentNames, strings.Join(words, " "))
+	}
+
+	return config.DetectedSpec{
+		Name:   header.Name,
+		Agents: strings.Join(agentNames, " → "),
+	}
 }
 
 // mcpConfigFile represents the JSON structure of MCP config files.
