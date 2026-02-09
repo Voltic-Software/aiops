@@ -37,7 +37,6 @@ type Project struct {
 // Paths holds the output locations for generated artifacts.
 type Paths struct {
 	Windsurf    string   `yaml:"windsurf,omitempty"`
-	Memories    string   `yaml:"memories,omitempty"`
 	Multiagency string   `yaml:"multiagency"`
 	Targets     []string `yaml:"targets,omitempty"` // detected IDE targets: windsurf, cursor, continue, copilot
 }
@@ -103,7 +102,6 @@ type BuildInfo struct {
 func DefaultPaths() Paths {
 	return Paths{
 		Windsurf:    ".windsurf",
-		Memories:    "", // resolved at runtime from $HOME
 		Multiagency: "multiagency",
 	}
 }

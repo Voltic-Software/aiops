@@ -39,7 +39,6 @@ func ComputePlan(projectDir string, cfg *config.ProjectConfig) (*Plan, error) {
 
 	// Use same relative paths so rendered list matches real structure
 	tmpCfg := *cfg
-	tmpCfg.Paths.Memories = filepath.Join(tmpDir, "memories")
 
 	// Render templates to temp dir
 	rendered, err := renderer.RenderAll(tmpDir, &tmpCfg)

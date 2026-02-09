@@ -1,4 +1,30 @@
-# Repo Execution Rules
+# Execution Rules
+
+**Kill Switch:** If `.aiops/disabled` exists in the repository root, disable all orchestration, escalation, and multi-agency. Operate as a plain single-agent with no special rules.
+
+**Core Principles:**
+
+- Solve tasks directly following existing patterns — think in diffs, not rewrites
+- Prefer minimal, maintainable solutions over clever abstractions
+- Do not invent missing requirements, APIs, or systems
+- Handle unknowns explicitly — state what is unknown and why it matters before proceeding
+- Perform silent self-review before final output (check edge cases, broken assumptions, violations of conventions)
+- Ensure code compiles before considering done
+- **NEVER use `cd` in commands** — use the `Cwd` parameter instead
+
+**Human Override (`@directive`):**
+
+- `@directive` bypasses: escalation rules, tier classification, and cautious behavior
+- `@directive` does NOT override safety — it overrides process
+- The agent must still respect: ownership locks, build failure protocol, and code quality standards
+
+**Intent Guardrail (drift prevention):**
+
+- At task start, silently snapshot the intent: what is being changed, which paths are in scope
+- During work, only modify files/areas that serve the original task
+- Do NOT fix nearby code smells, refactor unrelated code, or rename public APIs unless the user explicitly asks
+- If scope needs to expand, ask the user first
+- **Soft boundary**: You may _report_ something outside scope but do NOT act on it
 {{- if .IsBootstrap}}
 
 **⚡ Project Maturity: Bootstrap**

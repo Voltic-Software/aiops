@@ -186,21 +186,7 @@ func renderForTarget(projectDir string, cfg *config.ProjectConfig, t target.Targ
 
 	var rendered []string
 
-	// 1a. Render global policy rules (only for targets with a global location, e.g. Windsurf)
-	globalOut := t.ResolveGlobalRulesPath()
-	if globalOut != "" {
-		output, err := renderTemplate("templates/memories/global_rules.md.tmpl", data)
-		if err != nil {
-			return nil, fmt.Errorf("rendering global rules for %s: %w", t.Name, err)
-		}
-		if err := writeFile(globalOut, output); err != nil {
-			return nil, err
-		}
-		rel, _ := filepath.Rel(projectDir, globalOut)
-		rendered = append(rendered, rel)
-	}
-
-	// 1b. Render repo implementation rules (all targets get this in the project dir)
+	// 1. Render repo rules (all targets get this in the project dir)
 	repoOut := t.ResolveRepoRulesPath(projectDir)
 	if repoOut != "" {
 		output, err := renderTemplate("templates/repo_rules.md.tmpl", data)

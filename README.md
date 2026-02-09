@@ -3,7 +3,7 @@
 AIops is a **repo-aware agent orchestration system** that brings structure, safety,
 and scalability to AI-assisted software development.
 
-It installs *senior-engineer behavior as code* into your repository — rules,
+It installs _senior-engineer behavior as code_ into your repository — rules,
 workflows, coordination, and evolution — so AI works the way real teams do.
 
 ## Core Ideas
@@ -20,13 +20,12 @@ It is about **how AI should work inside a real codebase**.
 **Supported IDEs:** Windsurf (Cascade), Cursor, Continue (VS Code), GitHub Copilot  
 Auto-detected — AIops generates configuration for all supported IDEs found on your system.
 
-
 ## What It Does
 
 `aiops` scans your repository, detects your tech stack, and generates a complete,
 repo-specific AI execution system:
 
-- **Global rules** — behavioral constitution loaded into every AI session
+- **Repo rules** — behavioral constitution loaded into every AI session, scoped to the repository
 - **Orchestrator** — cross-session coordination with advisory locks and conflict prevention
 - **Workflows** — default execution mode, evolution audits, and multi-agent pipelines
 - **Multiagency module** — CLI, spec parser, agent executor, and pipeline orchestrator
@@ -100,7 +99,6 @@ IDE targets: Windsurf (Cascade), Cursor, GitHub Copilot
 Project maturity: bootstrap
 
 Generating artifacts...
-  ✓ ~/.codeium/windsurf/memories/global_rules.md  (global policy)
   ✓ .windsurf/rules/aiops.md                      (repo rules)
   ✓ .windsurf/workflows/default-mode.md
   ✓ .windsurf/workflows/orchestrator.md
@@ -186,9 +184,8 @@ Artifacts:
   ✓ Orchestrator workflow
   ✓ Session state
   ✓ Repo rules (Windsurf (Cascade))
-  ✓ Global rules (memories)
 
-6 installed, 0 missing
+5 installed, 0 missing
 
 Drift check...
 ✓ No drift detected
@@ -281,7 +278,7 @@ The following will be deleted:
   - .windsurf/workflows/multiagency.md
   - .windsurf/workflows/orchestrator.md
   - .windsurf/orchestrator/
-  - ~/.codeium/windsurf/memories/global_rules.md (global)
+  - .github/copilot-instructions.md
 
 Global tools and binaries will NOT be removed.
 
@@ -309,12 +306,12 @@ aiops uninstall --yes
 
 ## Supported IDE Targets
 
-| Target       | Rules                                          | Workflows              | Orchestrator              | Auto-detected by                      |
-| ------------ | ---------------------------------------------- | ---------------------- | ------------------------- | ------------------------------------- |
-| **Windsurf** | `~/.codeium/windsurf/memories/global_rules.md` | `.windsurf/workflows/` | `.windsurf/orchestrator/` | `~/.codeium/windsurf/` exists         |
-| **Cursor**   | `.cursor/rules/aiops.mdc`                      | `.cursor/prompts/`     | `.cursor/orchestrator/`   | `.cursor/` or `~/.cursor/` exists     |
-| **Continue** | `.continue/rules/aiops.md`                     | `.continue/prompts/`   | `.continue/orchestrator/` | `.continue/` or `~/.continue/` exists |
-| **Copilot**  | `.github/copilot-instructions.md`              | —                      | —                         | `.github/` or `~/.vscode/` exists     |
+| Target       | Rules                             | Workflows              | Orchestrator              | Auto-detected by                      |
+| ------------ | --------------------------------- | ---------------------- | ------------------------- | ------------------------------------- |
+| **Windsurf** | `.windsurf/rules/aiops.md`        | `.windsurf/workflows/` | `.windsurf/orchestrator/` | `~/.codeium/windsurf/` exists         |
+| **Cursor**   | `.cursor/rules/aiops.mdc`         | `.cursor/prompts/`     | `.cursor/orchestrator/`   | `.cursor/` or `~/.cursor/` exists     |
+| **Continue** | `.continue/rules/aiops.md`        | `.continue/prompts/`   | `.continue/orchestrator/` | `.continue/` or `~/.continue/` exists |
+| **Copilot**  | `.github/copilot-instructions.md` | —                      | —                         | `.github/` or `~/.vscode/` exists     |
 
 All targets get the same rules content, adapted to the correct file paths. Templates reference `{{.OrchestrDir}}` so each target's rules point to its own orchestrator location.
 
@@ -385,8 +382,8 @@ aiops/
 
 **Key design decisions:**
 
-- **Policy/implementation split** — global rules define policy (constitutional law); repo rules define implementation (statutes). Repo rules win on conflict.
-- **Target abstraction** — each IDE is a `Target` with path mappings for global rules, repo rules, workflows, orchestrator, and skills
+- **Repo-scoped rules** — all rules live inside the repository, versioned with git, shared via git
+- **Target abstraction** — each IDE is a `Target` with path mappings for rules, workflows, orchestrator, and skills
 - **Auto-detection** — scans for IDE config directories (`~/.codeium/windsurf/`, `.cursor/`, etc.)
 - **Render per target** — rules and workflows are rendered once per detected target with `{{.OrchestrDir}}` adapted
 - **Shared artifacts** — multiagency module and decisions directory are rendered once (IDE-independent)
@@ -412,18 +409,15 @@ aiops automatically detects project maturity and adapts AI behavior accordingly.
 
 Maturity transitions automatically when you run `aiops sync` — as the project grows, rules adapt.
 
-## Rules Architecture (Policy vs Implementation)
+## Rules Architecture
 
-aiops separates rules into two layers:
+All rules are **repo-scoped** — they live inside the repository, are versioned with git, and shared via git. Each IDE target gets the same rules content rendered to its specific path.
 
-| Layer                     | Contains                                                                                                     | Location                                   | Versioned? | Shared?  |
-| ------------------------- | ------------------------------------------------------------------------------------------------------------ | ------------------------------------------ | ---------- | -------- |
-| **Global (policy)**       | Core principles, escalation policy, intent guardrails, kill switch, repo auto-activation                     | `~/.codeium/windsurf/memories/`            | No         | Per-user |
-| **Repo (implementation)** | Maturity behavior, tier routing, escalation mechanics, MCP awareness, session coordination, decisions memory | `.windsurf/rules/`, `.cursor/rules/`, etc. | Yes (git)  | Via git  |
+| What           | Contains                                                                                                    | Location                                   | Versioned? | Shared? |
+| -------------- | ----------------------------------------------------------------------------------------------------------- | ------------------------------------------ | ---------- | ------- |
+| **Repo rules** | Core principles, maturity behavior, tier routing, escalation mechanics, MCP awareness, session coordination | `.windsurf/rules/`, `.cursor/rules/`, etc. | Yes (git)  | Via git |
 
-**Global rules** are constitutional law — they apply everywhere and never reference repo-specific details. They include a **repo auto-activation** directive: if a repo has `.aiops/` config or IDE rules, adopt them immediately.
-
-**Repo rules** are statutes — they define how this specific project operates. They include maturity-aware behavior, project-specific patterns, and escalation transparency.
+Repo rules include: kill switch, core principles, human override (`@directive`), intent guardrails, three-tier task routing, escalation transparency, session coordination, and decisions memory.
 
 **Kill switch:** Create `.aiops/disabled` in any repo to disable all orchestration, escalation, and multi-agency. The agent operates as a plain single-agent.
 
@@ -432,7 +426,7 @@ aiops separates rules into two layers:
 ## Design Principles
 
 - **Scan, don't configure** — detect the stack, don't ask 20 questions
-- **Policy vs implementation** — global rules define _when_ to escalate; repo rules define _how_
+- **Repo-scoped** — all rules live in the repo, versioned and shared via git
 - **Templates, not copy-paste** — templates are parameterized by detected stack
 - **Phased activation** — multi-agency is a thinking tool at start, gated at scale
 - **Baseline vs project state** — aiops generates baseline artifacts; project-specific learning stays in separate files

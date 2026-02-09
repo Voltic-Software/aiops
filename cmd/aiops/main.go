@@ -293,14 +293,6 @@ func cmdStatus() {
 		}
 	}
 
-	// Check memories path (global rules)
-	memDir := cfg.Paths.Memories
-	if memDir == "" {
-		home, _ := os.UserHomeDir()
-		memDir = filepath.Join(home, ".codeium", "windsurf", "memories")
-	}
-	artifacts = append(artifacts, artifact{filepath.Join(memDir, "global_rules.md"), "Global rules (memories)"})
-
 	fmt.Println("\nArtifacts:")
 	installed := 0
 	missing := 0
@@ -709,13 +701,6 @@ func cmdUninstall() {
 			p := filepath.Join(dir, t.OrchestrDir)
 			if _, err := os.Stat(p); err == nil {
 				removals = append(removals, removal{p, t.OrchestrDir + "/", true})
-			}
-		}
-		// Global rules (only remove the aiops-generated file, not the whole memories dir)
-		if t.GlobalRules != "" {
-			p := t.ResolveGlobalRulesPath()
-			if _, err := os.Stat(p); err == nil {
-				removals = append(removals, removal{p, "~/" + t.GlobalRules + " (global)", false})
 			}
 		}
 	}

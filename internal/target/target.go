@@ -9,8 +9,7 @@ import (
 type Target struct {
 	Name          string // e.g., "windsurf", "cursor", "continue", "copilot"
 	DisplayName   string // e.g., "Windsurf", "Cursor", "Continue (VS Code)", "GitHub Copilot"
-	GlobalRules   string // Where global policy rules go (relative to $HOME). Empty if target has no global location.
-	RepoRulesPath string // Where repo implementation rules go (relative to project dir)
+	RepoRulesPath string // Where repo rules go (relative to project dir)
 	WorkflowsDir  string // Where workflow/prompt files go (relative to project dir)
 	OrchestrDir   string // Where orchestrator state goes (relative to project dir)
 	SkillsDir     string // Where skill scaffolds go (relative to project dir)
@@ -28,7 +27,6 @@ var All = []Target{
 var Windsurf = Target{
 	Name:          "windsurf",
 	DisplayName:   "Windsurf (Cascade)",
-	GlobalRules:   filepath.Join(".codeium", "windsurf", "memories", "global_rules.md"),
 	RepoRulesPath: ".windsurf/rules/aiops.md",
 	WorkflowsDir:  ".windsurf/workflows",
 	OrchestrDir:   ".windsurf/orchestrator",
@@ -39,7 +37,6 @@ var Windsurf = Target{
 var Cursor = Target{
 	Name:          "cursor",
 	DisplayName:   "Cursor",
-	GlobalRules:   "",
 	RepoRulesPath: ".cursor/rules/aiops.mdc",
 	WorkflowsDir:  ".cursor/prompts",
 	OrchestrDir:   ".cursor/orchestrator",
@@ -50,7 +47,6 @@ var Cursor = Target{
 var Continue = Target{
 	Name:          "continue",
 	DisplayName:   "Continue (VS Code)",
-	GlobalRules:   "",
 	RepoRulesPath: ".continue/rules/aiops.md",
 	WorkflowsDir:  ".continue/prompts",
 	OrchestrDir:   ".continue/orchestrator",
@@ -61,7 +57,6 @@ var Continue = Target{
 var Copilot = Target{
 	Name:          "copilot",
 	DisplayName:   "GitHub Copilot",
-	GlobalRules:   "",
 	RepoRulesPath: ".github/copilot-instructions.md",
 	WorkflowsDir:  "", // Copilot doesn't support custom workflows
 	OrchestrDir:   "", // No orchestrator support
@@ -69,17 +64,7 @@ var Copilot = Target{
 	RulesFormat:   "markdown",
 }
 
-// ResolveGlobalRulesPath returns the absolute path for the global policy rules file.
-// Returns empty string if this target has no global rules location.
-func (t *Target) ResolveGlobalRulesPath() string {
-	if t.GlobalRules == "" {
-		return ""
-	}
-	home, _ := os.UserHomeDir()
-	return filepath.Join(home, t.GlobalRules)
-}
-
-// ResolveRepoRulesPath returns the absolute path for the repo implementation rules file.
+// ResolveRepoRulesPath returns the absolute path for the repo rules file.
 func (t *Target) ResolveRepoRulesPath(projectDir string) string {
 	if t.RepoRulesPath == "" {
 		return ""

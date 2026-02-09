@@ -108,7 +108,7 @@ func GenerateReport(patterns []Pattern, totalDirectives int) string {
 
 	sb.WriteString("## Next Steps\n\n")
 	sb.WriteString("1. Review each proposed rule change\n")
-	sb.WriteString("2. If approved, update `global_rules.md` accordingly\n")
+	sb.WriteString("2. If approved, update the repo rules accordingly\n")
 	sb.WriteString("3. Clear the `directive_log` in `session_state.yaml`\n")
 
 	return sb.String()
