@@ -11,17 +11,57 @@
 
 # Active sessions — each entry represents a workstream
 active_sessions: []
+  # Example:
+  # - id: frontend-refactor
+  #   focus: "Refactor dashboard components"
+  #   status: in_progress          # discovery | in_progress | blocked | completed
+  #   touched_areas:
+  #     - frontend/apps/customer/dashboard
+  #     - frontend/packages/ui-components
+  #   risks:
+  #     - "May affect shared Button component"
+  #   notes: []
+  #   started_at: "2026-02-07T12:00:00Z"
+  #   last_updated: "2026-02-07T12:00:00Z"
 
 # Area locks — advisory ownership claims over codebase areas
 # Agents MUST check these before attempting fixes in locked areas
 locks: []
+  # Example:
+  # - area: backend
+  #   owner: session-id
+  #   scope:
+  #     - internal/domain/energy
+  #     - pkg/domainspec
+  #   reason: "Refactoring energy domain DSL"
+  #   expected_instability: false   # If true, build failures are expected
+  #   allow_external_fixes: false   # If false, only owner may fix failures in scope
+  #   expires_at: "2026-02-07T14:00:00Z"
 
 # Completed sessions — recent history for context
 completed_sessions: []
+  # Example:
+  # - id: mcp-improvements
+  #   focus: "Implement MCP server knowledge tools"
+  #   completed_at: "2026-02-07T12:30:00Z"
+  #   outcome: "Added knowledge resources, dynamic code-gen, get_knowledge tool"
+  #   files_changed:
+  #     - mcp-server/src/resources/knowledge.ts
+  #     - mcp-server/src/tools/knowledge-tools.ts
 
 # Global notes — cross-cutting information any session should know
 global_notes: []
+  # Example:
+  # - "Backend build requires Go 1.22+"
+  # - "Do not touch pec/internal/modbus — hardware integration in progress"
 
 # Directive log — tracks @directive overrides for evolution analysis
 # The evolution audit reads this to detect patterns that signal rule tuning needs
+# Example: if the same override happens 3+ times, the default rule should change
 directive_log: []
+  # Example:
+  # - session: frontend-refactor
+  #   directive: "Ignore escalation. Apply minimal fix only."
+  #   reason: "Time-sensitive hotfix"
+  #   timestamp: "2026-02-07T14:00:00Z"
+  #   rule_overridden: escalation
