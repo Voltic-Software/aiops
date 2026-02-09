@@ -38,6 +38,8 @@ func main() {
 		cmdSkills()
 	case "sync":
 		cmdSync()
+	case "uninstall":
+		cmdUninstall()
 	case "version":
 		fmt.Printf("aiops %s\n", config.Version)
 	case "help", "--help", "-h":
@@ -60,10 +62,12 @@ Usage:
   aiops update    Regenerate artifacts from latest templates, show diff
   aiops evolve    Read directive logs and propose rule changes
   aiops skills    Generate skill scaffolds from detected frameworks
+  aiops uninstall Remove all aiops artifacts from this repository
   aiops version   Show version
 
 Options:
   --dir <path>    Project directory (default: current directory)
+  --yes           Skip confirmation prompts (for uninstall)
   --help          Show this help`)
 }
 
@@ -235,11 +239,39 @@ func cmdStatus() {
 
 	cfg, err := config.Load(dir)
 	if err != nil {
-		fmt.Println("✗ Not initialized. Run `aiops init` first.")
+		fmt.Println("AIops is not installed in this repository.")
+		fmt.Println("Run: aiops init")
 		os.Exit(1)
 	}
 
-	fmt.Printf("aiops status — %s (v%s)\n\n", cfg.Project.Name, cfg.Version)
+	fmt.Println("AIops installed ✔")
+	fmt.Printf("Version:    %s\n", config.Version)
+	fmt.Printf("Project:    %s\n", cfg.Project.Name)
+	fmt.Printf("Maturity:   %s\n", cfg.Project.Maturity)
+
+	// Targets
+	if len(cfg.Paths.Targets) > 0 {
+		fmt.Printf("Targets:    %s\n", strings.Join(cfg.Paths.Targets, ", "))
+	}
+
+	// MCP servers
+	if len(cfg.Detected.MCPServers) > 0 {
+		var mcpNames []string
+		for _, m := range cfg.Detected.MCPServers {
+			mcpNames = append(mcpNames, m.Name)
+		}
+		fmt.Printf("MCP:        %s\n", strings.Join(mcpNames, ", "))
+	} else {
+		fmt.Println("MCP:        none")
+	}
+
+	// Skills
+	detectedSkills := scanner.DetectSkills(dir)
+	fmt.Printf("Skills:     %d\n", len(detectedSkills))
+
+	// Specs
+	detectedSpecs := scanner.DetectSpecs(dir)
+	fmt.Printf("Workflows:  %d\n", len(detectedSpecs))
 
 	// Check which artifacts exist
 	type artifact struct {
@@ -249,11 +281,19 @@ func cmdStatus() {
 
 	artifacts := []artifact{
 		{filepath.Join(dir, cfg.Paths.Windsurf, "workflows", "default-mode.md"), "Default mode workflow"},
+		{filepath.Join(dir, cfg.Paths.Windsurf, "workflows", "multiagency.md"), "Multiagency workflow"},
 		{filepath.Join(dir, cfg.Paths.Windsurf, "workflows", "orchestrator.md"), "Orchestrator workflow"},
 		{filepath.Join(dir, cfg.Paths.Windsurf, "orchestrator", "session_state.yaml"), "Session state"},
 	}
 
-	// Check memories path
+	// Check for repo rules
+	for _, t := range target.Detect(dir) {
+		if t.RepoRulesPath != "" {
+			artifacts = append(artifacts, artifact{filepath.Join(dir, t.RepoRulesPath), fmt.Sprintf("Repo rules (%s)", t.DisplayName)})
+		}
+	}
+
+	// Check memories path (global rules)
 	memDir := cfg.Paths.Memories
 	if memDir == "" {
 		home, _ := os.UserHomeDir()
@@ -261,7 +301,7 @@ func cmdStatus() {
 	}
 	artifacts = append(artifacts, artifact{filepath.Join(memDir, "global_rules.md"), "Global rules (memories)"})
 
-	fmt.Println("Artifacts:")
+	fmt.Println("\nArtifacts:")
 	installed := 0
 	missing := 0
 	for _, a := range artifacts {
@@ -277,7 +317,7 @@ func cmdStatus() {
 	fmt.Printf("\n%d installed, %d missing\n", installed, missing)
 
 	// Re-scan and compare
-	fmt.Println("\nRe-scanning repository...")
+	fmt.Println("\nDrift check...")
 	stack, err := scanner.Scan(dir)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Warning: scan failed: %v\n", err)
@@ -286,13 +326,13 @@ func cmdStatus() {
 
 	diffs := compareStack(&cfg.Detected, stack)
 	if len(diffs) == 0 {
-		fmt.Println("✓ Detected stack matches config — no drift detected")
+		fmt.Println("✓ No drift detected")
 	} else {
 		fmt.Println("⚠  Stack drift detected:")
 		for _, d := range diffs {
 			fmt.Printf("  - %s\n", d)
 		}
-		fmt.Println("\nRun `aiops init` to regenerate artifacts.")
+		fmt.Println("\nRun `aiops sync` to update.")
 	}
 
 	// Check orchestrator state
@@ -585,6 +625,140 @@ func cmdSync() {
 	}
 
 	fmt.Printf("\n✅ Synced. %d files updated.\n", len(files))
+}
+
+// --- uninstall command ---
+
+func cmdUninstall() {
+	dir := getDir()
+
+	cfg, err := config.Load(dir)
+	if err != nil {
+		fmt.Println("AIops is not installed in this repository.")
+		os.Exit(1)
+	}
+
+	// Check for --yes flag
+	autoConfirm := false
+	for _, arg := range os.Args {
+		if arg == "--yes" || arg == "-y" {
+			autoConfirm = true
+		}
+	}
+
+	// Collect all paths to remove
+	type removal struct {
+		path  string
+		label string
+		isDir bool
+	}
+	var removals []removal
+
+	// .aiops.yaml config
+	configPath := filepath.Join(dir, ".aiops.yaml")
+	if _, err := os.Stat(configPath); err == nil {
+		removals = append(removals, removal{configPath, ".aiops.yaml", false})
+	}
+
+	// .aiops/ directory (kill switch, future state)
+	aiopsDir := filepath.Join(dir, ".aiops")
+	if _, err := os.Stat(aiopsDir); err == nil {
+		removals = append(removals, removal{aiopsDir, ".aiops/", true})
+	}
+
+	// decisions/ directory (only if it contains the seed file and nothing else)
+	decisionsDir := filepath.Join(dir, "decisions")
+	if entries, err := os.ReadDir(decisionsDir); err == nil {
+		if len(entries) == 1 && entries[0].Name() == "0001-aiops-initialized.md" {
+			removals = append(removals, removal{decisionsDir, "decisions/ (seed only)", true})
+		}
+	}
+
+	// multiagency/ directory
+	multiagencyDir := cfg.Paths.Multiagency
+	if multiagencyDir == "" {
+		multiagencyDir = "multiagency"
+	}
+	multiagencyPath := filepath.Join(dir, multiagencyDir)
+	if _, err := os.Stat(multiagencyPath); err == nil {
+		removals = append(removals, removal{multiagencyPath, multiagencyDir + "/", true})
+	}
+
+	// Per-target artifacts
+	targets := target.Detect(dir)
+	for _, t := range targets {
+		// Repo rules file
+		if t.RepoRulesPath != "" {
+			p := filepath.Join(dir, t.RepoRulesPath)
+			if _, err := os.Stat(p); err == nil {
+				removals = append(removals, removal{p, t.RepoRulesPath, false})
+			}
+		}
+		// Workflows dir (only aiops-generated files)
+		if t.WorkflowsDir != "" {
+			wfDir := filepath.Join(dir, t.WorkflowsDir)
+			for _, name := range []string{"default-mode.md", "multiagency.md", "orchestrator.md"} {
+				p := filepath.Join(wfDir, name)
+				if _, err := os.Stat(p); err == nil {
+					removals = append(removals, removal{p, filepath.Join(t.WorkflowsDir, name), false})
+				}
+			}
+		}
+		// Orchestrator dir
+		if t.OrchestrDir != "" {
+			p := filepath.Join(dir, t.OrchestrDir)
+			if _, err := os.Stat(p); err == nil {
+				removals = append(removals, removal{p, t.OrchestrDir + "/", true})
+			}
+		}
+		// Global rules (only remove the aiops-generated file, not the whole memories dir)
+		if t.GlobalRules != "" {
+			p := t.ResolveGlobalRulesPath()
+			if _, err := os.Stat(p); err == nil {
+				removals = append(removals, removal{p, "~/" + t.GlobalRules + " (global)", false})
+			}
+		}
+	}
+
+	if len(removals) == 0 {
+		fmt.Println("Nothing to remove.")
+		return
+	}
+
+	fmt.Println("This will remove AIops from this repository.")
+	fmt.Println()
+	fmt.Println("The following will be deleted:")
+	for _, r := range removals {
+		fmt.Printf("  - %s\n", r.label)
+	}
+	fmt.Println("\nGlobal tools and binaries will NOT be removed.")
+
+	if !autoConfirm {
+		fmt.Println()
+		if !confirm("Proceed?") {
+			fmt.Println("Aborted.")
+			return
+		}
+	}
+
+	// Remove everything
+	removed := 0
+	for _, r := range removals {
+		var err error
+		if r.isDir {
+			err = os.RemoveAll(r.path)
+		} else {
+			err = os.Remove(r.path)
+		}
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "  ✗ Failed to remove %s: %v\n", r.label, err)
+		} else {
+			fmt.Printf("  ✓ Removed %s\n", r.label)
+			removed++
+		}
+	}
+
+	fmt.Printf("\n✅ AIops uninstalled. %d items removed.\n", removed)
 }
 
 // --- helpers ---

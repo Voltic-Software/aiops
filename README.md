@@ -1,20 +1,40 @@
-# aiops
+# AIops
 
-AI-powered operations infrastructure for your codebase. Installs senior-engineer behavior as code — rules, workflows, coordination, and evolution — for any AI-powered IDE.
+AIops is a **repo-aware agent orchestration system** that brings structure, safety,
+and scalability to AI-assisted software development.
 
-**Supported targets:** Windsurf (Cascade), Cursor, Continue (VS Code), GitHub Copilot. Auto-detected — generates for all IDEs found on your system.
+It installs *senior-engineer behavior as code* into your repository — rules,
+workflows, coordination, and evolution — so AI works the way real teams do.
+
+## Core Ideas
+
+- **Default single-agent mode** for fast, pragmatic work grounded in the codebase
+- **Explicit escalation** into multi-agent workflows when complexity or risk demands it
+- **Agent roles, skills, and governance** that evolve with the repository
+- **Safe parallelism** with intent guardrails, advisory locks, and build-failure isolation
+- **Human override** (`@directive`) that bypasses process without bypassing safety
+
+AIops is not just about operations.  
+It is about **how AI should work inside a real codebase**.
+
+**Supported IDEs:** Windsurf (Cascade), Cursor, Continue (VS Code), GitHub Copilot  
+Auto-detected — AIops generates configuration for all supported IDEs found on your system.
+
 
 ## What It Does
 
-`aiops` scans your repository, detects your tech stack, and generates a complete set of AI session management artifacts:
+`aiops` scans your repository, detects your tech stack, and generates a complete,
+repo-specific AI execution system:
 
 - **Global rules** — behavioral constitution loaded into every AI session
-- **Orchestrator** — cross-session coordination with advisory locks and build failure protocol
-- **Workflows** — default execution mode, evolution audits, multiagency specs
-- **Multiagency module** — complete Go module with CLI, spec parser, LLM clients, agent executor, and pipeline orchestrator
-- **Intent guardrails** — prevents agents from drifting outside task scope
-- **Escalation budget** — prevents over-cautious behavior
-- **Human override** (`@directive`) — escape hatch that overrides process, not safety
+- **Orchestrator** — cross-session coordination with advisory locks and conflict prevention
+- **Workflows** — default execution mode, evolution audits, and multi-agent pipelines
+- **Multiagency module** — CLI, spec parser, agent executor, and pipeline orchestrator
+- **Intent guardrails** — prevent task drift and scope creep
+- **Escalation budget** — prevents over-cautious, timid behavior
+- **Human override** (`@directive`) — override process without breaking safety
+
+AIops makes AI behave like a disciplined teammate, not an unpredictable intern.
 
 ## Installation
 
@@ -146,24 +166,35 @@ Run this after adding/removing MCP servers, installing new IDEs, or when the pro
 
 ### `aiops status`
 
-Shows what's installed and detects drift (new frameworks, languages, patterns, MCP servers added since last init).
+Shows installation status, detected features, and checks for drift.
 
 ```
 $ aiops status
 
-aiops status — myproject (v0.1.0)
+AIops installed ✔
+Version:    0.3.1
+Project:    myproject
+Maturity:   active
+Targets:    windsurf, copilot
+MCP:        vera
+Skills:     5
+Workflows:  8
 
 Artifacts:
   ✓ Default mode workflow
+  ✓ Multiagency workflow
   ✓ Orchestrator workflow
   ✓ Session state
+  ✓ Repo rules (Windsurf (Cascade))
   ✓ Global rules (memories)
 
-4 installed, 0 missing
+6 installed, 0 missing
 
-Re-scanning repository...
-✓ Detected stack matches config — no drift detected
+Drift check...
+✓ No drift detected
 ```
+
+Scriptable check: `aiops version` returns exit code 0 if installed, or use `aiops status` in CI.
 
 ### `aiops update`
 
@@ -231,6 +262,50 @@ Generate these skill scaffolds? [Y/n] y
 
 ✅ Generated 4 skill scaffolds.
 ```
+
+### `aiops uninstall`
+
+Removes all aiops-generated artifacts from the repository. Does **not** remove the global binary or editor settings.
+
+```
+$ aiops uninstall
+
+This will remove AIops from this repository.
+
+The following will be deleted:
+  - .aiops.yaml
+  - decisions/ (seed only)
+  - multiagency/
+  - .windsurf/rules/aiops.md
+  - .windsurf/workflows/default-mode.md
+  - .windsurf/workflows/multiagency.md
+  - .windsurf/workflows/orchestrator.md
+  - .windsurf/orchestrator/
+  - ~/.codeium/windsurf/memories/global_rules.md (global)
+
+Global tools and binaries will NOT be removed.
+
+Proceed? [Y/n] y
+
+  ✓ Removed .aiops.yaml
+  ✓ Removed multiagency/
+  ...
+
+✅ AIops uninstalled. 9 items removed.
+```
+
+To skip confirmation (for CI/scripts):
+
+```bash
+aiops uninstall --yes
+```
+
+**Safety rules:**
+
+- User code is never removed
+- `decisions/` is only removed if it contains only the aiops seed file
+- Editor settings and global binaries are untouched
+- Skills directories are preserved (user-customized content)
 
 ## Supported IDE Targets
 
