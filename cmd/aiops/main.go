@@ -568,36 +568,35 @@ func cmdSync() {
 	hasChanges := len(added) > 0 || len(removed) > 0 || len(addedTargets) > 0 || len(removedTargets) > 0 || maturityChanged || skillsChanged || specsChanged
 
 	if !hasChanges {
-		fmt.Println("✓ No changes detected. MCPs, targets, maturity, skills, and specs are up to date.")
+		fmt.Println("✓ No stack changes detected. Re-rendering artifacts to ensure integrity.")
 		fmt.Printf("  MCP servers: %d\n", len(cfg.Detected.MCPServers))
 		fmt.Printf("  Targets: %s\n", strings.Join(cfg.Paths.Targets, ", "))
 		fmt.Printf("  Maturity: %s\n", cfg.Project.Maturity)
 		fmt.Printf("  Skills: %d\n", len(cfg.Detected.Skills))
 		fmt.Printf("  Specs: %d\n", len(cfg.Detected.Specs))
-		return
-	}
-
-	// Report changes
-	for _, name := range added {
-		fmt.Printf("  + MCP added: %s\n", name)
-	}
-	for _, name := range removed {
-		fmt.Printf("  - MCP removed: %s\n", name)
-	}
-	for _, name := range addedTargets {
-		fmt.Printf("  + Target added: %s\n", name)
-	}
-	for _, name := range removedTargets {
-		fmt.Printf("  - Target removed: %s\n", name)
-	}
-	if maturityChanged {
-		fmt.Printf("  ↑ Maturity changed: %s → %s\n", cfg.Project.Maturity, newMaturity)
-	}
-	if skillsChanged {
-		fmt.Printf("  ↑ Skills changed: %d → %d\n", len(cfg.Detected.Skills), len(newSkills))
-	}
-	if specsChanged {
-		fmt.Printf("  ↑ Specs changed: %d → %d\n", len(cfg.Detected.Specs), len(newSpecs))
+	} else {
+		// Report changes
+		for _, name := range added {
+			fmt.Printf("  + MCP added: %s\n", name)
+		}
+		for _, name := range removed {
+			fmt.Printf("  - MCP removed: %s\n", name)
+		}
+		for _, name := range addedTargets {
+			fmt.Printf("  + Target added: %s\n", name)
+		}
+		for _, name := range removedTargets {
+			fmt.Printf("  - Target removed: %s\n", name)
+		}
+		if maturityChanged {
+			fmt.Printf("  ↑ Maturity changed: %s → %s\n", cfg.Project.Maturity, newMaturity)
+		}
+		if skillsChanged {
+			fmt.Printf("  ↑ Skills changed: %d → %d\n", len(cfg.Detected.Skills), len(newSkills))
+		}
+		if specsChanged {
+			fmt.Printf("  ↑ Specs changed: %d → %d\n", len(cfg.Detected.Specs), len(newSpecs))
+		}
 	}
 
 	// Update config
@@ -620,7 +619,7 @@ func cmdSync() {
 		os.Exit(1)
 	}
 
-	fmt.Printf("\n✅ Synced. %d files updated.\n", len(files))
+	fmt.Printf("\n✅ Synced. %d files rendered.\n", len(files))
 }
 
 // --- uninstall command ---
