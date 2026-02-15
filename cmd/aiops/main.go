@@ -38,6 +38,8 @@ func main() {
 		cmdSkills()
 	case "sync":
 		cmdSync()
+	case "doctor":
+		cmdDoctor()
 	case "uninstall":
 		cmdUninstall()
 	case "version":
@@ -62,6 +64,7 @@ Usage:
   aiops update    Regenerate artifacts from latest templates, show diff
   aiops evolve    Read directive logs and propose rule changes
   aiops skills    Generate skill scaffolds from detected frameworks
+  aiops doctor    Check integrity of aiops installation
   aiops uninstall Remove all aiops artifacts from this repository
   aiops version   Show version
 
@@ -280,6 +283,7 @@ func cmdStatus() {
 	}
 
 	artifacts := []artifact{
+		{filepath.Join(dir, ".aiops", "soul.md"), "Soul (constitution)"},
 		{filepath.Join(dir, cfg.Paths.Windsurf, "workflows", "default-mode.md"), "Default mode workflow"},
 		{filepath.Join(dir, cfg.Paths.Windsurf, "workflows", "multiagency.md"), "Multiagency workflow"},
 		{filepath.Join(dir, cfg.Paths.Windsurf, "workflows", "orchestrator.md"), "Orchestrator workflow"},
@@ -652,7 +656,7 @@ func cmdUninstall() {
 		removals = append(removals, removal{configPath, ".aiops.yaml", false})
 	}
 
-	// .aiops/ directory (kill switch, future state)
+	// .aiops/ directory (soul.md, soul.local.md, kill switch)
 	aiopsDir := filepath.Join(dir, ".aiops")
 	if _, err := os.Stat(aiopsDir); err == nil {
 		removals = append(removals, removal{aiopsDir, ".aiops/", true})
@@ -744,6 +748,150 @@ func cmdUninstall() {
 	}
 
 	fmt.Printf("\n✅ AIops uninstalled. %d items removed.\n", removed)
+}
+
+// --- doctor command ---
+
+func cmdDoctor() {
+	dir := getDir()
+
+	fmt.Println("aiops doctor — checking installation integrity")
+	fmt.Println()
+
+	cfg, err := config.Load(dir)
+	if err != nil {
+		fmt.Println("  ✗ .aiops.yaml — missing (not initialized)")
+		fmt.Println("\nRun `aiops init` to initialize.")
+		os.Exit(1)
+	}
+
+	passed := 0
+	warned := 0
+	failed := 0
+
+	pass := func(label string) {
+		fmt.Printf("  ✓ %s\n", label)
+		passed++
+	}
+	warn := func(label, msg string) {
+		fmt.Printf("  ⚠ %s — %s\n", label, msg)
+		warned++
+	}
+	fail := func(label, msg string) {
+		fmt.Printf("  ✗ %s — %s\n", label, msg)
+		failed++
+	}
+
+	// 1. Config
+	pass(".aiops.yaml")
+
+	// 2. Soul
+	soulPath := filepath.Join(dir, ".aiops", "soul.md")
+	if _, err := os.Stat(soulPath); err == nil {
+		// Verify it matches the canonical soul (not tampered)
+		canonical, readErr := renderer.GetTemplateFS().ReadFile("templates/soul/soul.md")
+		if readErr == nil {
+			actual, _ := os.ReadFile(soulPath)
+			if string(actual) == string(canonical) {
+				pass("soul.md (canonical)")
+			} else {
+				warn("soul.md", "modified from canonical — run `aiops sync` to restore")
+			}
+		} else {
+			pass("soul.md")
+		}
+	} else {
+		fail("soul.md", "missing — run `aiops sync` to create")
+	}
+
+	// 3. Soul local (optional)
+	soulLocalPath := filepath.Join(dir, ".aiops", "soul.local.md")
+	if _, err := os.Stat(soulLocalPath); err == nil {
+		pass("soul.local.md (optional)")
+	} else {
+		warn("soul.local.md", "not created — optional, run `aiops sync` to generate template")
+	}
+
+	// 4. Kill switch check
+	disabledPath := filepath.Join(dir, ".aiops", "disabled")
+	if _, err := os.Stat(disabledPath); err == nil {
+		warn("kill switch", "ACTIVE — .aiops/disabled exists, all orchestration is disabled")
+	} else {
+		pass("kill switch (inactive)")
+	}
+
+	// 5. Repo rules per target
+	targets := target.Detect(dir)
+	for _, t := range targets {
+		if t.RepoRulesPath != "" {
+			p := filepath.Join(dir, t.RepoRulesPath)
+			if _, err := os.Stat(p); err == nil {
+				pass(fmt.Sprintf("repo rules (%s)", t.DisplayName))
+			} else {
+				fail(fmt.Sprintf("repo rules (%s)", t.DisplayName), "missing")
+			}
+		}
+	}
+
+	// 6. Workflows
+	windsurfDir := cfg.Paths.Windsurf
+	if windsurfDir == "" {
+		windsurfDir = ".windsurf"
+	}
+	for _, wf := range []string{"default-mode.md", "multiagency.md", "orchestrator.md"} {
+		p := filepath.Join(dir, windsurfDir, "workflows", wf)
+		if _, err := os.Stat(p); err == nil {
+			pass(fmt.Sprintf("workflow/%s", wf))
+		} else {
+			fail(fmt.Sprintf("workflow/%s", wf), "missing")
+		}
+	}
+
+	// 7. Orchestrator
+	statePath := filepath.Join(dir, windsurfDir, "orchestrator", "session_state.yaml")
+	if _, err := os.Stat(statePath); err == nil {
+		pass("session_state.yaml")
+	} else {
+		fail("session_state.yaml", "missing")
+	}
+
+	// 8. Decisions directory
+	decisionsDir := filepath.Join(dir, "decisions")
+	if _, err := os.Stat(decisionsDir); err == nil {
+		pass("decisions/")
+	} else {
+		warn("decisions/", "not found — run `aiops sync` to create")
+	}
+
+	// 9. Multiagency module
+	multiagencyDir := cfg.Paths.Multiagency
+	if multiagencyDir == "" {
+		multiagencyDir = "multiagency"
+	}
+	multiagencyMod := filepath.Join(dir, multiagencyDir, "go.mod")
+	if _, err := os.Stat(multiagencyMod); err == nil {
+		pass("multiagency/go.mod")
+	} else {
+		warn("multiagency/go.mod", "not found")
+	}
+
+	// 10. Version check
+	if cfg.Version != config.Version {
+		warn("version", fmt.Sprintf("config says %s, binary is %s — run `aiops update`", cfg.Version, config.Version))
+	} else {
+		pass(fmt.Sprintf("version (%s)", config.Version))
+	}
+
+	// Summary
+	fmt.Printf("\n%d passed, %d warnings, %d failed\n", passed, warned, failed)
+	if failed > 0 {
+		fmt.Println("\nRun `aiops sync` to fix missing artifacts.")
+		os.Exit(1)
+	} else if warned > 0 {
+		fmt.Println("\n⚠ Some warnings detected. Review above.")
+	} else {
+		fmt.Println("\n✅ Installation is healthy.")
+	}
 }
 
 // --- helpers ---

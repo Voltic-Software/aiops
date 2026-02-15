@@ -290,6 +290,33 @@ func renderShared(projectDir string, cfg *config.ProjectConfig) ([]string, error
 		}
 	}
 
+	// Render soul files into .aiops/
+	aiopsDir := filepath.Join(projectDir, ".aiops")
+
+	// soul.md is always overwritten (owned by AIops)
+	soulContent, err := templateFS.ReadFile("templates/soul/soul.md")
+	if err != nil {
+		return nil, fmt.Errorf("reading soul.md template: %w", err)
+	}
+	soulPath := filepath.Join(aiopsDir, "soul.md")
+	if err := writeFile(soulPath, soulContent); err != nil {
+		return nil, err
+	}
+	rendered = append(rendered, ".aiops/soul.md")
+
+	// soul.local.md is only created if it doesn't exist (owned by user)
+	soulLocalPath := filepath.Join(aiopsDir, "soul.local.md")
+	if _, statErr := os.Stat(soulLocalPath); os.IsNotExist(statErr) {
+		soulLocalContent, err := templateFS.ReadFile("templates/soul/soul.local.md")
+		if err != nil {
+			return nil, fmt.Errorf("reading soul.local.md template: %w", err)
+		}
+		if err := writeFile(soulLocalPath, soulLocalContent); err != nil {
+			return nil, err
+		}
+		rendered = append(rendered, ".aiops/soul.local.md")
+	}
+
 	return rendered, nil
 }
 

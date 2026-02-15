@@ -25,6 +25,7 @@ Auto-detected — AIops generates configuration for all supported IDEs found on 
 `aiops` scans your repository, detects your tech stack, and generates a complete,
 repo-specific AI execution system:
 
+- **Soul** — constitutional philosophy anchoring all AI behavior (`.aiops/soul.md`)
 - **Repo rules** — behavioral constitution loaded into every AI session, scoped to the repository
 - **Orchestrator** — cross-session coordination with advisory locks and conflict prevention
 - **Workflows** — default execution mode, evolution audits, and multi-agent pipelines
@@ -99,6 +100,8 @@ IDE targets: Windsurf (Cascade), Cursor, GitHub Copilot
 Project maturity: bootstrap
 
 Generating artifacts...
+  ✓ .aiops/soul.md                                 (constitution)
+  ✓ .aiops/soul.local.md                           (local extension)
   ✓ .windsurf/rules/aiops.md                      (repo rules)
   ✓ .windsurf/workflows/default-mode.md
   ✓ .windsurf/workflows/orchestrator.md
@@ -179,13 +182,14 @@ Skills:     5
 Workflows:  8
 
 Artifacts:
+  ✓ Soul (constitution)
   ✓ Default mode workflow
   ✓ Multiagency workflow
   ✓ Orchestrator workflow
   ✓ Session state
   ✓ Repo rules (Windsurf (Cascade))
 
-5 installed, 0 missing
+6 installed, 0 missing
 
 Drift check...
 ✓ No drift detected
@@ -260,6 +264,36 @@ Generate these skill scaffolds? [Y/n] y
 ✅ Generated 4 skill scaffolds.
 ```
 
+### `aiops doctor`
+
+Checks the integrity of the aiops installation — verifies all artifacts exist, soul.md is canonical, version matches, and no orphaned state.
+
+```
+$ aiops doctor
+
+aiops doctor — checking installation integrity
+
+  ✓ .aiops.yaml
+  ✓ soul.md (canonical)
+  ✓ soul.local.md (optional)
+  ✓ kill switch (inactive)
+  ✓ repo rules (Windsurf (Cascade))
+  ✓ repo rules (GitHub Copilot)
+  ✓ workflow/default-mode.md
+  ✓ workflow/multiagency.md
+  ✓ workflow/orchestrator.md
+  ✓ session_state.yaml
+  ✓ decisions/
+  ✓ multiagency/go.mod
+  ✓ version (0.2.0)
+
+13 passed, 0 warnings, 0 failed
+
+✅ Installation is healthy.
+```
+
+If soul.md has been manually modified, doctor will warn and suggest `aiops sync` to restore the canonical version.
+
 ### `aiops uninstall`
 
 Removes all aiops-generated artifacts from the repository. Does **not** remove the global binary or editor settings.
@@ -271,6 +305,7 @@ This will remove AIops from this repository.
 
 The following will be deleted:
   - .aiops.yaml
+  - .aiops/ (soul.md, soul.local.md)
   - decisions/ (seed only)
   - multiagency/
   - .windsurf/rules/aiops.md
@@ -316,6 +351,17 @@ aiops uninstall --yes
 All targets get the same rules content, adapted to the correct file paths. Templates reference `{{.OrchestrDir}}` so each target's rules point to its own orchestrator location.
 
 ## What Gets Generated
+
+### `aiops init` — Soul (constitutional layer)
+
+| File                   | Purpose                                              | Owned by |
+| ---------------------- | ---------------------------------------------------- | -------- |
+| `.aiops/soul.md`       | Core constitution — identical across all repos       | AIops    |
+| `.aiops/soul.local.md` | Optional repo-specific extension — never overwritten | User     |
+
+`soul.md` is always overwritten by `aiops sync` / `aiops update` to keep the constitution canonical. `soul.local.md` is created once and never touched again — it belongs to the repository.
+
+Agents do **not** load `soul.md` directly. Instead, the repo rules embed a distilled reference: _"All behavior must remain consistent with the principles defined in `.aiops/soul.md`."_ The soul influences runtime behavior through the policy layer, not by being injected into every session.
 
 ### `aiops init` — Per-target artifacts (repeated for each detected IDE)
 
@@ -369,7 +415,7 @@ aiops/
 │   ├── renderer/
 │   │   ├── renderer.go             # Multi-target template rendering engine
 │   │   └── templates/
-│   │       ├── memories/           # → Global policy rules (Windsurf only)
+│   │       ├── soul/               # → Constitution (soul.md + soul.local.md)
 │   │       ├── repo_rules.md.tmpl  # → Repo implementation rules (all targets)
 │   │       ├── decisions/          # → Decisions memory scaffold
 │   │       ├── windsurf/           # → Workflows + orchestrator (rendered per target)
@@ -382,6 +428,7 @@ aiops/
 
 **Key design decisions:**
 
+- **Constitutional anchor** — `soul.md` defines invariant philosophy; `soul.local.md` allows repo-specific extension
 - **Repo-scoped rules** — all rules live inside the repository, versioned with git, shared via git
 - **Target abstraction** — each IDE is a `Target` with path mappings for rules, workflows, orchestrator, and skills
 - **Auto-detection** — scans for IDE config directories (`~/.codeium/windsurf/`, `.cursor/`, etc.)
@@ -411,13 +458,16 @@ Maturity transitions automatically when you run `aiops sync` — as the project 
 
 ## Rules Architecture
 
-All rules are **repo-scoped** — they live inside the repository, are versioned with git, and shared via git. Each IDE target gets the same rules content rendered to its specific path.
+AIops uses a layered architecture: **constitution → policy → execution**.
 
-| What           | Contains                                                                                                    | Location                                   | Versioned? | Shared? |
-| -------------- | ----------------------------------------------------------------------------------------------------------- | ------------------------------------------ | ---------- | ------- |
-| **Repo rules** | Core principles, maturity behavior, tier routing, escalation mechanics, MCP awareness, session coordination | `.windsurf/rules/`, `.cursor/rules/`, etc. | Yes (git)  | Via git |
+| Layer               | File                                 | Contains                                                                            | Owned by | Overwritten by sync? |
+| ------------------- | ------------------------------------ | ----------------------------------------------------------------------------------- | -------- | -------------------- |
+| **Constitution**    | `.aiops/soul.md`                     | Mission, optimization targets, escalation philosophy, non-negotiables               | AIops    | Yes (always)         |
+| **Local extension** | `.aiops/soul.local.md`               | Repo-specific principles (optional)                                                 | User     | No (never)           |
+| **Policy (rules)**  | `.windsurf/rules/`, `.cursor/rules/` | Kill switch, core principles, tier routing, escalation, MCP awareness, coordination | AIops    | Yes                  |
+| **Execution**       | Workflows, orchestrator, skills      | Default mode, multiagency, session state, skill scaffolds                           | AIops    | Yes                  |
 
-Repo rules include: kill switch, core principles, human override (`@directive`), intent guardrails, three-tier task routing, escalation transparency, session coordination, and decisions memory.
+The constitution informs the policy layer. It is not re-read in every session — agents inherit distilled constraints through the repo rules.
 
 **Kill switch:** Create `.aiops/disabled` in any repo to disable all orchestration, escalation, and multi-agency. The agent operates as a plain single-agent.
 
